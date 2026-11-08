@@ -1,0 +1,21 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "lecturas": {
+      ".read": true,
+      "$id": {
+        ".write": "!data.exists() && newData.exists()",
+        ".validate": "newData.hasChildren(['volt','ma','luz','tds','hum','tdht','ts'])",
+        "volt": { ".validate": "newData.isNumber()" },
+        "ma":   { ".validate": "newData.isNumber()" },
+        "luz":  { ".validate": "newData.isNumber()" },
+        "tds":  { ".validate": "newData.isNumber()" },
+        "hum":  { ".validate": "newData.isNumber()" },
+        "tdht": { ".validate": "newData.isNumber()" },
+        "ts":   { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}

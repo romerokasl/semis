@@ -1,0 +1,2374 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sunny.EMC — Solar Telemetry Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="logo.svg">
+  
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              yellow: '#FFDE00',
+              yellowHover: '#E5C700',
+              yellowMuted: 'rgba(255, 222, 0, 0.15)',
+              dark: '#080808',
+              card: '#0F0F11',
+              cardHover: '#151518',
+              border: '#1F1F24',
+              borderSubtle: '#18181C',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- ApexCharts CDN for shadcn-style fluid charts -->
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #080808;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #27272a;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3f3f46;
+    }
+
+    .badge-mono {
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.08em;
+    }
+
+    /* ApexCharts custom overrides for shadcn look */
+    .apexcharts-tooltip.apexcharts-theme-dark {
+      background: #0f0f11 !important;
+      border: 1px solid #27272a !important;
+      border-radius: 8px !important;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.8) !important;
+      font-family: 'Inter', sans-serif !important;
+      padding: 6px 10px !important;
+    }
+    .apexcharts-tooltip-title {
+      background: #18181b !important;
+      border-bottom: 1px solid #27272a !important;
+      font-family: 'JetBrains Mono', monospace !important;
+      font-size: 11px !important;
+      padding: 5px 8px !important;
+    }
+    .apexcharts-xaxistooltip, .apexcharts-yaxistooltip {
+      background: #18181b !important;
+      border: 1px solid #3f3f46 !important;
+      color: #f4f4f5 !important;
+      font-family: 'JetBrains Mono', monospace !important;
+      border-radius: 4px !important;
+    }
+
+    /* Disable all unwanted data label floats */
+    .apexcharts-datalabels, .apexcharts-datalabel, .apexcharts-data-labels {
+      display: none !important;
+    }
+  </style>
+</head>
+<body class="bg-brand-dark text-neutral-100 min-h-screen font-sans antialiased flex flex-col selection:bg-brand-yellow selection:text-black">
+
+  <!-- ================= NAVBAR SUPERIOR (Conexión) ================= -->
+  <header class="border-b border-brand-border bg-brand-card/90 backdrop-blur-md sticky top-0 z-40 px-4 sm:px-8 py-3.5 transition-all">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      
+      <!-- Brand & Project Title: Sunny.EMC -->
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <img src="logo.svg" alt="Sunny.EMC Logo" class="w-[45px] h-[45px] object-contain rounded-md flex-shrink-0" />
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="font-extrabold text-lg tracking-tight text-white flex items-center">
+                Sunny<span class="text-brand-yellow">.EMC</span>
+              </h1>
+            </div>
+            <p class="text-xs text-neutral-400">Monitoreo de Panel Solar</p>
+          </div>
+        </div>
+
+        <!-- Mobile Quick Status -->
+        <div class="md:hidden flex items-center gap-2">
+          <div id="mobile-status-pill" class="flex items-center gap-1.5 px-2.5 py-1 rounded border border-brand-yellow/30 text-[11px] font-mono text-black bg-brand-yellow font-bold">
+            <span class="w-1.5 h-1.5 rounded-full bg-black animate-pulse"></span>
+            <span>CONECTADO</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connection Controls Bar (Single Conectado/Desconectado Button) -->
+      <div class="flex flex-wrap items-center gap-2.5 bg-neutral-950/70 border border-brand-border p-1.5 rounded-lg">
+        
+        <!-- Custom Shadcn-Style Dropdown Menu for Connection Modes -->
+        <div class="relative" id="conn-dropdown-wrapper">
+          <button 
+            type="button" 
+            id="conn-dropdown-btn" 
+            onclick="toggleConnDropdown(event)" 
+            class="bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-xs font-mono text-neutral-200 py-2 px-3 rounded flex items-center justify-between gap-2.5 focus:outline-none transition min-w-[170px]"
+          >
+            <span id="conn-selected-text" class="flex items-center gap-2 truncate">
+              <span class="w-1.5 h-1.5 rounded-full bg-brand-yellow"></span>
+              Simulación Demo
+            </span>
+            <i data-lucide="chevron-down" id="conn-chevron" class="w-3.5 h-3.5 text-neutral-400 transition-transform duration-200"></i>
+          </button>
+
+          <!-- Shadcn Floating Popover Menu -->
+          <div 
+            id="conn-dropdown-menu" 
+            class="hidden absolute left-0 mt-1.5 w-56 bg-brand-card border border-brand-border rounded-lg shadow-2xl p-1 z-50 font-mono text-xs backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100"
+          >
+            <div class="px-2.5 py-1.5 text-[10px] text-neutral-500 uppercase tracking-wider font-semibold border-b border-neutral-850 mb-1">
+              Método de Enlace
+            </div>
+
+            <button 
+              type="button" 
+              onclick="selectConnMode('sim', 'Simulación Demo')" 
+              class="w-full text-left px-2.5 py-2 rounded flex items-center justify-between text-neutral-300 hover:text-white hover:bg-neutral-800/80 transition group"
+            >
+              <div class="flex items-center gap-2">
+                <i data-lucide="play-circle" class="w-3.5 h-3.5 text-neutral-400 group-hover:text-brand-yellow"></i>
+                <span>Simulación Demo</span>
+              </div>
+              <span id="check-sim" class="text-brand-yellow"><i data-lucide="check" class="w-3.5 h-3.5"></i></span>
+            </button>
+
+            <button 
+              type="button" 
+              onclick="selectConnMode('ws', 'WebSocket (Wi-Fi)')" 
+              class="w-full text-left px-2.5 py-2 rounded flex items-center justify-between text-neutral-300 hover:text-white hover:bg-neutral-800/80 transition group"
+            >
+              <div class="flex items-center gap-2">
+                <i data-lucide="wifi" class="w-3.5 h-3.5 text-neutral-400 group-hover:text-brand-yellow"></i>
+                <span>WebSocket (Wi-Fi)</span>
+              </div>
+              <span id="check-ws" class="hidden text-brand-yellow"><i data-lucide="check" class="w-3.5 h-3.5"></i></span>
+            </button>
+
+            <button 
+              type="button" 
+              onclick="selectConnMode('http', 'HTTP Poll (REST)')" 
+              class="w-full text-left px-2.5 py-2 rounded flex items-center justify-between text-neutral-300 hover:text-white hover:bg-neutral-800/80 transition group"
+            >
+              <div class="flex items-center gap-2">
+                <i data-lucide="globe" class="w-3.5 h-3.5 text-neutral-400 group-hover:text-brand-yellow"></i>
+                <span>HTTP Poll (REST)</span>
+              </div>
+              <span id="check-http" class="hidden text-brand-yellow"><i data-lucide="check" class="w-3.5 h-3.5"></i></span>
+            </button>
+
+            <button 
+              type="button" 
+              onclick="selectConnMode('serial', 'WebSerial (USB Direct)')" 
+              class="w-full text-left px-2.5 py-2 rounded flex items-center justify-between text-neutral-300 hover:text-white hover:bg-neutral-800/80 transition group"
+            >
+              <div class="flex items-center gap-2">
+                <i data-lucide="cable" class="w-3.5 h-3.5 text-neutral-400 group-hover:text-brand-yellow"></i>
+                <span>WebSerial (USB Direct)</span>
+              </div>
+              <span id="check-serial" class="hidden text-brand-yellow"><i data-lucide="check" class="w-3.5 h-3.5"></i></span>
+            </button>
+
+            <button
+              type="button"
+              onclick="selectConnMode('firebase', 'Firebase (Celular)')"
+              class="w-full text-left px-2.5 py-2 rounded flex items-center justify-between text-neutral-300 hover:text-white hover:bg-neutral-800/80 transition group"
+            >
+              <div class="flex items-center gap-2">
+                <i data-lucide="cloud" class="w-3.5 h-3.5 text-neutral-400 group-hover:text-brand-yellow"></i>
+                <span>Firebase (Celular)</span>
+              </div>
+              <span id="check-firebase" class="hidden text-brand-yellow"><i data-lucide="check" class="w-3.5 h-3.5"></i></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- IP Indicator Pill (Overlay trigger when WS/HTTP is selected) -->
+        <button 
+          id="ip-config-trigger" 
+          onclick="openIpOverlay()" 
+          title="Configurar dirección IP" 
+          class="hidden bg-neutral-900 border border-neutral-800 hover:border-neutral-700 hover:bg-neutral-850 text-neutral-300 text-xs py-2 px-3 rounded items-center gap-1.5 transition font-mono"
+        >
+          <i data-lucide="network" class="w-3.5 h-3.5 text-brand-yellow"></i>
+          <span id="current-ip-badge">192.168.1.150</span>
+          <i data-lucide="edit-3" class="w-3 h-3 text-neutral-500 ml-1"></i>
+        </button>
+
+        <!-- Baud Rate Selector Pill (Visible when WebSerial is selected) -->
+        <div id="baud-config-trigger" class="hidden relative">
+          <button 
+            type="button" 
+            id="btn-baud-select" 
+            onclick="toggleBaudDropdown(event)" 
+            title="Seleccionar velocidad Serial" 
+            class="bg-neutral-900 border border-neutral-800 hover:border-neutral-700 hover:bg-neutral-850 text-neutral-300 text-xs py-2 px-3 rounded flex items-center gap-1.5 transition font-mono"
+          >
+            <i data-lucide="cable" class="w-3.5 h-3.5 text-brand-yellow"></i>
+            <span id="current-baud-badge">115200 baud</span>
+            <i data-lucide="chevron-down" id="baud-chevron" class="w-3 h-3 text-neutral-500 ml-0.5 transition-transform duration-200"></i>
+          </button>
+          <div 
+            id="baud-dropdown-menu" 
+            class="hidden absolute right-0 mt-1.5 w-36 bg-brand-card border border-brand-border rounded-lg shadow-2xl p-1 z-50 font-mono text-xs backdrop-blur-xl"
+          >
+            <button 
+              type="button" 
+              onclick="setBaudRate(115200)" 
+              class="w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between text-neutral-300 hover:text-white hover:bg-neutral-800/80 transition"
+            >
+              <span>115200</span>
+              <span id="check-baud-115200" class="text-brand-yellow"><i data-lucide="check" class="w-3 h-3"></i></span>
+            </button>
+            <button 
+              type="button" 
+              onclick="setBaudRate(9600)" 
+              class="w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between text-neutral-300 hover:text-white hover:bg-neutral-800/80 transition"
+            >
+              <span>9600</span>
+              <span id="check-baud-9600" class="hidden text-brand-yellow"><i data-lucide="check" class="w-3 h-3"></i></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Conectado / Desconectado Single Action Toggle Button (Yellow contrast when connected, gray when disconnected) -->
+        <button 
+          id="btn-connect" 
+          onclick="toggleConnection()" 
+          class="bg-brand-yellow hover:bg-brand-yellowHover text-black font-semibold text-xs py-2 px-4 rounded flex items-center gap-2 transition active:scale-95 shadow-sm font-mono tracking-wide"
+        >
+          <span class="w-2 h-2 rounded-full bg-black animate-pulse"></span>
+          <span id="btn-connect-label">CONECTADO</span>
+        </button>
+
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ================= IP CONFIGURATION OVERLAY MODAL ================= -->
+  <div id="ip-overlay" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-brand-card border border-brand-border rounded-xl max-w-sm w-full p-5 shadow-2xl relative font-mono text-xs">
+      
+      <div class="flex items-center justify-between pb-3 border-b border-brand-borderSubtle mb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded bg-brand-yellow/10 flex items-center justify-center text-brand-yellow border border-brand-yellow/20">
+            <i data-lucide="network" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h4 class="font-bold text-white text-sm">Dirección de Red</h4>
+            <p class="text-[11px] text-neutral-400 font-sans">Endpoint del dispositivo</p>
+          </div>
+        </div>
+        <button onclick="closeIpOverlay()" class="text-neutral-400 hover:text-white p-1 rounded hover:bg-neutral-800 transition">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <p class="text-neutral-400 mb-3 text-[11px] font-sans">
+        Ingresa la IP local o dominio para el enlace <span class="text-brand-yellow font-mono" id="overlay-protocol-label">WebSocket</span>:
+      </p>
+
+      <div class="relative mb-4">
+        <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-500 font-mono text-xs" id="overlay-prefix">
+          ws://
+        </span>
+        <input 
+          type="text" 
+          id="esp-endpoint" 
+          value="192.168.1.150" 
+          placeholder="192.168.1.150" 
+          class="w-full bg-neutral-900 border border-neutral-800 focus:border-brand-yellow text-xs font-mono text-white pl-14 pr-3 py-2.5 rounded-lg focus:outline-none placeholder-neutral-600 transition"
+          onkeydown="if(event.key === 'Enter') saveAndConnectFromOverlay()"
+        />
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-brand-borderSubtle">
+        <button onclick="closeIpOverlay()" class="px-3 py-2 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 font-sans transition">
+          Cerrar
+        </button>
+        <button onclick="saveAndConnectFromOverlay()" class="px-4 py-2 rounded bg-brand-yellow hover:bg-brand-yellowHover text-black font-semibold font-sans flex items-center gap-1.5 transition active:scale-95">
+          <span>Guardar & Conectar</span>
+          <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= MAIN CONTENT DASHBOARD ================= -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+
+    <!-- ================= METRIC CARDS (NUMERO GRANDE CON COMPARATIVO ABAJO, SIN PALABRA VARIACION) ================= -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      
+      <!-- CARD 1: VOLTAJE SOLAR -->
+      <div class="bg-brand-card hover:bg-brand-cardHover border border-brand-border rounded-xl p-4 transition duration-200 relative overflow-hidden group flex flex-col justify-between">
+        <div class="absolute -right-3 -top-3 w-16 h-16 bg-brand-yellow/5 rounded-full blur-xl group-hover:bg-brand-yellow/10 transition"></div>
+        <div class="flex items-center justify-between text-neutral-400 mb-2">
+          <span class="text-xs font-mono tracking-wider uppercase flex items-center gap-1.5 text-neutral-300 font-semibold">
+            <i data-lucide="zap" class="w-3.5 h-3.5 text-brand-yellow"></i>
+            Voltaje
+          </span>
+        </div>
+        
+        <div>
+          <!-- Numero grande -->
+          <div class="flex items-baseline gap-1.5 my-1">
+            <span class="text-4xl sm:text-[42px] font-extrabold text-white tracking-tight font-mono leading-none" id="val-voltage">0.00</span>
+            <span class="text-base font-bold text-white font-mono">V</span>
+          </div>
+
+          <!-- Comparativo porcentual abajo del numero grande (sin la palabra Variación) -->
+          <div class="mt-2.5 pt-2 border-t border-neutral-900/80">
+            <div id="trend-voltage-val" class="text-emerald-400 font-semibold font-mono text-xs flex items-center gap-1">
+              <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+              <span>+0.0% vs ciclo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 2: CORRIENTE SOLAR -->
+      <div class="bg-brand-card hover:bg-brand-cardHover border border-brand-border rounded-xl p-4 transition duration-200 relative overflow-hidden group flex flex-col justify-between">
+        <div class="absolute -right-3 -top-3 w-16 h-16 bg-brand-yellow/5 rounded-full blur-xl group-hover:bg-brand-yellow/10 transition"></div>
+        <div class="flex items-center justify-between text-neutral-400 mb-2">
+          <span class="text-xs font-mono tracking-wider uppercase flex items-center gap-1.5 text-neutral-300 font-semibold">
+            <i data-lucide="activity" class="w-3.5 h-3.5 text-brand-yellow"></i>
+            Corriente
+          </span>
+        </div>
+        
+        <div>
+          <div class="flex items-baseline gap-1.5 my-1">
+            <span class="text-4xl sm:text-[42px] font-extrabold text-white tracking-tight font-mono leading-none" id="val-current">0.00</span>
+            <span class="text-base font-bold text-white font-mono">A</span>
+          </div>
+
+          <div class="mt-2.5 pt-2 border-t border-neutral-900/80">
+            <div id="trend-current-val" class="text-emerald-400 font-semibold font-mono text-xs flex items-center gap-1">
+              <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+              <span>+0.0% vs ciclo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 3: POTENCIA INSTANTÁNEA -->
+      <div class="bg-brand-card hover:bg-brand-cardHover border border-brand-border rounded-xl p-4 transition duration-200 relative overflow-hidden group flex flex-col justify-between">
+        <div class="flex items-center justify-between text-neutral-400 mb-2">
+          <span class="text-xs font-mono tracking-wider uppercase flex items-center gap-1.5 text-neutral-300 font-semibold">
+            <i data-lucide="flame" class="w-3.5 h-3.5 text-brand-yellow"></i>
+            Potencia
+          </span>
+        </div>
+        
+        <div>
+          <div class="flex items-baseline gap-1.5 my-1">
+            <span class="text-4xl sm:text-[42px] font-extrabold text-white tracking-tight font-mono leading-none" id="val-power">0.0</span>
+            <span class="text-base font-bold text-white font-mono">W</span>
+          </div>
+
+          <div class="mt-2.5 pt-2 border-t border-neutral-900/80">
+            <div id="trend-power-val" class="text-emerald-400 font-semibold font-mono text-xs flex items-center gap-1">
+              <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+              <span>+0.0% vs ciclo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 4: IRRADIANCIA SOLAR -->
+      <div class="bg-brand-card hover:bg-brand-cardHover border border-brand-border rounded-xl p-4 transition duration-200 relative overflow-hidden group flex flex-col justify-between">
+        <div class="flex items-center justify-between text-neutral-400 mb-2">
+          <span class="text-xs font-mono tracking-wider uppercase flex items-center gap-1.5 text-neutral-300 font-semibold">
+            <i data-lucide="sun-medium" class="w-3.5 h-3.5 text-brand-yellow"></i>
+            Irradiancia
+          </span>
+        </div>
+        
+        <div>
+          <div class="flex items-baseline gap-1.5 my-1">
+            <span class="text-4xl sm:text-[42px] font-extrabold text-white tracking-tight font-mono leading-none" id="val-irradiance">0</span>
+            <span class="text-sm font-bold text-white font-mono">W/m²</span>
+          </div>
+
+          <div class="mt-2.5 pt-2 border-t border-neutral-900/80">
+            <div id="trend-irradiance-val" class="text-emerald-400 font-semibold font-mono text-xs flex items-center gap-1">
+              <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+              <span>+0.0% vs ciclo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 5: TEMPERATURA & HUMEDAD -->
+      <div class="bg-brand-card hover:bg-brand-cardHover border border-brand-border rounded-xl p-4 transition duration-200 relative overflow-hidden group flex flex-col justify-between">
+        <div class="flex items-center justify-between text-neutral-400 mb-2">
+          <span class="text-xs font-mono tracking-wider uppercase flex items-center gap-1.5 text-neutral-300 font-semibold">
+            <i data-lucide="thermometer" class="w-3.5 h-3.5 text-brand-yellow"></i>
+            Ambiente / Panel
+          </span>
+        </div>
+        
+        <div>
+          <div class="flex items-baseline justify-between gap-2 my-1">
+            <div class="flex items-baseline gap-1">
+              <span class="text-3xl sm:text-[36px] font-extrabold text-white tracking-tight font-mono leading-none" id="val-temperature">0.0</span>
+              <span class="text-xs font-bold text-white font-mono">°C</span>
+            </div>
+            <div class="flex items-baseline gap-1">
+              <span class="text-3xl sm:text-[36px] font-extrabold text-white tracking-tight font-mono leading-none" id="val-humidity">0</span>
+              <span class="text-xs font-bold text-white font-mono">%</span>
+            </div>
+          </div>
+
+          <div class="mt-2.5 pt-2 border-t border-neutral-900/80">
+            <div id="trend-climate-val" class="text-emerald-400 font-semibold font-mono text-xs flex items-center gap-1">
+              <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+              <span>+0.0% vs ciclo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ================= CHARTS SECTION: CLEAN HEADERS (WITHOUT SUBTITLES) ================= -->
+    <div class="space-y-6">
+
+      <!-- 1. PRIMARY HERO ROW: VOLTAJE Y CORRIENTE + PANEL LATERAL DE EFICIENCIA (REAL VS. NOMINAL) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+
+        <!-- GRÁFICO PRINCIPAL: VOLTAJE & CORRIENTE (COL 8) -->
+        <div class="lg:col-span-8 xl:col-span-8 bg-brand-card border border-brand-border rounded-xl p-5 flex flex-col justify-between">
+          
+          <!-- Header del Gráfico: Voltaje & Corriente -->
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                Voltaje & Corriente
+              </h3>
+            </div>
+
+            <!-- Controls: Time Filters + Reset Button -->
+            <div class="flex items-center gap-2">
+              <div class="flex items-center bg-neutral-950 p-1 rounded-lg border border-neutral-800 text-[11px] font-mono gap-1">
+                <button onclick="changeTimeframe('vc', 'mes', this)" class="time-btn-vc px-2.5 py-1 rounded text-neutral-400 hover:text-white transition">Mes</button>
+                <button onclick="changeTimeframe('vc', 'semana', this)" class="time-btn-vc px-2.5 py-1 rounded text-neutral-400 hover:text-white transition">Semana</button>
+                <button onclick="changeTimeframe('vc', 'dia', this)" class="time-btn-vc px-2.5 py-1 rounded text-neutral-400 hover:text-white transition">Día</button>
+                <button onclick="changeTimeframe('vc', 'hora', this)" class="time-btn-vc px-2.5 py-1 rounded text-neutral-400 hover:text-white transition">Hora</button>
+                <button onclick="changeTimeframe('vc', 'actual', this)" class="time-btn-vc px-2.5 py-1 rounded bg-brand-yellow text-black font-semibold transition active-btn">Actual</button>
+              </div>
+
+              <button onclick="resetChartData()" title="Limpiar buffer histórico" class="p-1.5 rounded bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 hover:text-white transition">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Canvas para el Gráfico Principal -->
+          <div class="w-full flex-1 min-h-[350px] relative">
+            <div id="chart-voltage-current" class="w-full h-full"></div>
+          </div>
+
+          <!-- Leyenda Abajo Centrada e Interactiva -->
+          <div class="mt-3 pt-3 border-t border-brand-borderSubtle flex items-center justify-center gap-4">
+            <button 
+              id="legend-vc-voltaje" 
+              onclick="toggleChartSeries('vc', 'Voltaje (V)', 'legend-vc-voltaje')" 
+              class="flex items-center gap-2 px-3 py-1.5 rounded-md bg-neutral-950 border border-neutral-800 hover:border-neutral-700 text-xs font-mono transition cursor-pointer select-none group"
+              title="Clic para alternar visibilidad de Voltaje"
+            >
+              <span class="w-2.5 h-2.5 rounded-sm bg-brand-yellow"></span>
+              <span class="text-neutral-300 group-hover:text-white font-medium">Voltaje (V)</span>
+            </button>
+
+            <button 
+              id="legend-vc-corriente" 
+              onclick="toggleChartSeries('vc', 'Corriente (A)', 'legend-vc-corriente')" 
+              class="flex items-center gap-2 px-3 py-1.5 rounded-md bg-neutral-950 border border-neutral-800 hover:border-neutral-700 text-xs font-mono transition cursor-pointer select-none group"
+              title="Clic para alternar visibilidad de Corriente"
+            >
+              <span class="w-2.5 h-2.5 rounded-sm bg-white"></span>
+              <span class="text-neutral-300 group-hover:text-white font-medium">Corriente (A)</span>
+            </button>
+          </div>
+
+        </div>
+
+        <!-- PANEL LATERAL: EFICIENCIA REAL VS. NOMINAL (COL 4 - MISMA ALTURA QUE LA GRÁFICA) -->
+        <div class="lg:col-span-4 xl:col-span-4 bg-brand-card border border-brand-border rounded-xl p-5 flex flex-col justify-between h-full relative overflow-hidden group">
+          <div class="absolute -right-4 -top-4 w-28 h-28 bg-brand-yellow/5 rounded-full blur-2xl pointer-events-none"></div>
+          
+          <!-- Encabezado del Panel de Eficiencia -->
+          <div>
+            <div class="flex items-center justify-between pb-3.5 border-b border-brand-borderSubtle">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-md bg-neutral-900 border border-neutral-800 flex items-center justify-center text-brand-yellow">
+                  <i data-lucide="gauge" class="w-4 h-4"></i>
+                </div>
+                <div>
+                  <h4 class="text-sm font-bold text-white tracking-tight">Eficiencia de Conversión</h4>
+                  <p class="text-[11px] text-neutral-400 font-mono">Panel Fotovoltaico</p>
+                </div>
+              </div>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-neutral-400">
+                STC Reference
+              </span>
+            </div>
+
+            <!-- BLOQUES COMPARATIVOS CON NÚMEROS EN GRANDE -->
+            <div class="mt-4 space-y-4">
+              
+              <!-- 1. Eficiencia Real (En grande) -->
+              <div class="p-4 rounded-xl bg-neutral-950/70 border border-neutral-800/70 relative overflow-hidden">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-xs font-mono tracking-wider uppercase text-neutral-400 font-semibold flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-brand-yellow animate-pulse"></span>
+                    Eficiencia Real
+                  </span>
+                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-brand-yellow/10 text-brand-yellow border border-brand-yellow/20">Dinámica</span>
+                </div>
+                
+                <div class="flex items-baseline gap-1 my-1">
+                  <span class="text-4xl sm:text-5xl font-extrabold text-white tracking-tight font-mono leading-none" id="val-efficiency-real">0.0</span>
+                  <span class="text-xl sm:text-2xl font-bold text-brand-yellow font-mono">%</span>
+                </div>
+
+                <p class="text-[11px] text-neutral-400 font-sans mt-1">
+                  Cálculo en vivo: P / (Irradiación × Área de celda)
+                </p>
+              </div>
+
+              <!-- 2. Eficiencia Nominal (En grande) -->
+              <div class="p-4 rounded-xl bg-neutral-950/70 border border-neutral-800/70 relative overflow-hidden">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-xs font-mono tracking-wider uppercase text-neutral-400 font-semibold">
+                    Eficiencia Nominal
+                  </span>
+                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-neutral-900 text-neutral-400 border border-neutral-800">STC (1000 W/m²)</span>
+                </div>
+                
+                <div class="flex items-baseline gap-1 my-1">
+                  <span class="text-4xl sm:text-5xl font-extrabold text-neutral-200 tracking-tight font-mono leading-none" id="val-efficiency-nominal">20.5</span>
+                  <span class="text-xl sm:text-2xl font-bold text-neutral-400 font-mono">%</span>
+                </div>
+
+                <p class="text-[11px] text-neutral-400 font-sans mt-1">
+                  Especificación de fábrica en condiciones estándar
+                </p>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Parte Inferior: Ratio de Rendimiento (PR) y Desvío -->
+          <div class="mt-4 pt-3.5 border-t border-brand-borderSubtle space-y-2">
+            <div class="flex items-center justify-between text-xs font-mono">
+              <span class="text-neutral-400">Performance Ratio (PR):</span>
+              <span class="text-brand-yellow font-bold text-sm" id="val-efficiency-ratio">PR 85%</span>
+            </div>
+
+            <div class="w-full bg-neutral-900 rounded-full h-2 overflow-hidden border border-neutral-800/80">
+              <div id="eff-progress-bar" class="bg-brand-yellow h-full transition-all duration-500" style="width: 85%;"></div>
+            </div>
+
+            <div class="flex items-center justify-between text-[11px] font-mono text-neutral-500 pt-0.5">
+              <span>Desvío vs Nominal: <span id="val-efficiency-delta" class="font-semibold text-emerald-400">+0.0%</span></span>
+              <span>Área: 0.50 m²</span>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- 2. SECOND ROW: 2-COLUMN BALANCED GRID (IRRADIANCIA & TEMPERATURA/HUMEDAD) -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- GRÁFICA: RADIACIÓN SOLAR (SIN UNIDADES W/m² EN TÍTULO) -->
+        <div class="bg-brand-card border border-brand-border rounded-xl p-5 flex flex-col justify-between">
+          
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
+            <h3 class="text-base font-bold text-white tracking-tight flex items-center gap-2">
+              Radiación Solar
+            </h3>
+
+            <!-- Timeframe Filter Buttons -->
+            <div class="flex items-center bg-neutral-950 p-1 rounded-lg border border-neutral-800 text-[11px] font-mono gap-1">
+              <button onclick="changeTimeframe('irr', 'mes', this)" class="time-btn-irr px-2.5 py-1 rounded text-neutral-400 hover:text-white transition">Mes</button>
+              <button onclick="changeTimeframe('irr', 'semana', this)" class="time-btn-irr px-2.5 py-1 rounded text-neutral-400 hover:text-white transition">Semana</button>
+              <button onclick="changeTimeframe('irr', 'dia', this)" class="time-btn-irr px-2.5 py-1 rounded text-neutral-400 hover:text-white transition">Día</button>
+              <button onclick="changeTimeframe('irr', 'hora', this)" class="time-btn-irr px-2.5 py-1 rounded text-neutral-400 hover:text-white transition">Hora</button>
+              <button onclick="changeTimeframe('irr', 'actual', this)" class="time-btn-irr px-2.5 py-1 rounded bg-brand-yellow text-black font-semibold transition active-btn">Actual</button>
+            </div>
+          </div>
+
+          <!-- Chart Container -->
+          <div class="w-full my-auto min-h-[260px]">
+            <div id="chart-irradiance" class="w-full h-full"></div>
+          </div>
+
+          <!-- Irradiance & Efficiency Real vs. Nominal mini bars -->
+          <div class="pt-4 border-t border-brand-borderSubtle grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-xs">
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-neutral-400">
+                <span>Rango Exposición</span>
+                <span class="text-white font-semibold" id="irr-percentage">85%</span>
+              </div>
+              <div class="w-full bg-neutral-900 rounded-full h-1.5 overflow-hidden border border-neutral-800">
+                <div id="irr-progress-bar" class="bg-brand-yellow h-full transition-all duration-500" style="width: 85%;"></div>
+              </div>
+              <div class="flex justify-between text-[10px] text-neutral-500">
+                <span>0</span>
+                <span>500 (Nublado)</span>
+                <span>1200 W/m²</span>
+              </div>
+            </div>
+
+            <div class="space-y-1.5">
+              <div class="flex justify-between text-neutral-400">
+                <span>Eficiencia Real vs. Nominal</span>
+                <span class="text-brand-yellow font-semibold" id="chart-eff-display">0.0% <span class="text-neutral-500 font-normal">/ 20.5%</span></span>
+              </div>
+              <div class="w-full bg-neutral-900 rounded-full h-1.5 overflow-hidden border border-neutral-800">
+                <div id="chart-eff-progress-bar" class="bg-brand-yellow h-full transition-all duration-500" style="width: 85%;"></div>
+              </div>
+              <div class="flex justify-between text-[10px] text-neutral-500">
+                <span>0%</span>
+                <span id="chart-eff-ratio" class="text-neutral-400">PR: 0%</span>
+                <span>Nominal: 20.5%</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- GRÁFICA: CONDICIONES AMBIENTALES (TEMPERATURA & HUMEDAD) -->
+        <div class="bg-brand-card border border-brand-border rounded-xl p-5 flex flex-col justify-between">
+          
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
+            <h3 class="text-base font-bold text-white tracking-tight flex items-center gap-2">
+              Temperatura & Humedad
+            </h3>
+
+            <!-- Timeframe Filter Buttons -->
+            <div class="flex items-center bg-neutral-950 p-1 rounded-lg border border-neutral-800 text-[11px] font-mono gap-1">
+              <button onclick="changeTimeframe('th', 'mes', this)" class="time-btn-th px-2.5 py-1 rounded text-neutral-400 hover:text-white transition">Mes</button>
+              <button onclick="changeTimeframe('th', 'semana', this)" class="time-btn-th px-2.5 py-1 rounded text-neutral-400 hover:text-white transition">Semana</button>
+              <button onclick="changeTimeframe('th', 'dia', this)" class="time-btn-th px-2.5 py-1 rounded text-neutral-400 hover:text-white transition">Día</button>
+              <button onclick="changeTimeframe('th', 'hora', this)" class="time-btn-th px-2.5 py-1 rounded text-neutral-400 hover:text-white transition">Hora</button>
+              <button onclick="changeTimeframe('th', 'actual', this)" class="time-btn-th px-2.5 py-1 rounded bg-brand-yellow text-black font-semibold transition active-btn">Actual</button>
+            </div>
+          </div>
+
+          <!-- Climate Chart Canvas -->
+          <div class="w-full min-h-[260px]">
+            <div id="chart-temp-humidity" class="w-full h-full"></div>
+          </div>
+
+          <!-- Leyenda Abajo Centrada e Interactiva -->
+          <div class="mt-3 pt-3 border-t border-brand-borderSubtle flex items-center justify-center gap-4">
+            <button 
+              id="legend-th-temp" 
+              onclick="toggleChartSeries('th', 'Temperatura (°C)', 'legend-th-temp')" 
+              class="flex items-center gap-2 px-3 py-1.5 rounded-md bg-neutral-950 border border-neutral-800 hover:border-neutral-700 text-xs font-mono transition cursor-pointer select-none group"
+              title="Clic para alternar visibilidad de Temperatura"
+            >
+              <span class="w-2.5 h-2.5 rounded-sm bg-brand-yellow"></span>
+              <span class="text-neutral-300 group-hover:text-white font-medium">Temperatura (°C)</span>
+            </button>
+
+            <button 
+              id="legend-th-hum" 
+              onclick="toggleChartSeries('th', 'Humedad (%)', 'legend-th-hum')" 
+              class="flex items-center gap-2 px-3 py-1.5 rounded-md bg-neutral-950 border border-neutral-800 hover:border-neutral-700 text-xs font-mono transition cursor-pointer select-none group"
+              title="Clic para alternar visibilidad de Humedad"
+            >
+              <span class="w-2.5 h-2.5 rounded-sm bg-cyan-400"></span>
+              <span class="text-neutral-300 group-hover:text-white font-medium">Humedad (%)</span>
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ================= INFERENCIA PREDICTIVA IA (XGBOOST CLASSIFIER) ================= -->
+    <div class="bg-brand-card border border-brand-border rounded-xl p-5 md:p-6 transition-all duration-300 relative overflow-hidden group">
+      
+      <!-- Encabezado con modelo, estado de API y controles -->
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-brand-borderSubtle">
+        <div>
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center text-brand-yellow shadow-inner">
+              <i data-lucide="cpu" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-white tracking-tight">
+                Diagnóstico Predictivo
+              </h3>
+              <p class="text-xs text-neutral-400 mt-0.5">
+                Evaluación en tiempo real del estado del panel y detección de anomalías
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Botones de Acción y Estado del Servidor API -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- API Status Badge -->
+          <div id="xgb-api-badge" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 text-[11px] font-mono text-neutral-400">
+            <span id="xgb-api-dot" class="w-2 h-2 rounded-full bg-neutral-600"></span>
+            <span id="xgb-api-text">API: En espera (localhost:5000)</span>
+          </div>
+
+          <!-- Botón de inferencia manual -->
+          <button 
+            type="button" 
+            onclick="triggerXGBoostInference(true)" 
+            id="btn-run-inference" 
+            class="px-3.5 py-1.5 rounded-lg bg-brand-yellow hover:bg-brand-yellowHover text-black font-semibold text-xs font-mono flex items-center gap-1.5 transition active:scale-95 shadow-sm"
+          >
+            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+            <span>Diagnosticar Ahora</span>
+          </button>
+
+          <!-- Botón de configuración de API -->
+          <button 
+            type="button" 
+            onclick="toggleXgbSettings()" 
+            title="Configuración de Endpoint API" 
+            class="p-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 hover:text-white transition"
+          >
+            <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Configuración desplegable de Endpoint API -->
+      <div id="xgb-settings-drawer" class="hidden my-3 p-3 rounded-lg bg-neutral-950/80 border border-neutral-800/60 font-mono text-xs">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="flex-1">
+            <label class="block text-[11px] text-neutral-400 mb-1">URL Endpoint API Python (xgboost_api.py):</label>
+            <div class="flex items-center gap-2">
+              <input 
+                type="text" 
+                id="xgb-endpoint-url" 
+                value="http://127.0.0.1:5000/api/predict" 
+                class="w-full bg-neutral-900 border border-neutral-800 rounded px-2.5 py-1 text-xs text-white focus:outline-none focus:border-brand-yellow font-mono"
+              />
+              <button 
+                type="button" 
+                onclick="testApiConnection()" 
+                class="px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs whitespace-nowrap"
+              >
+                Probar Ping
+              </button>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 text-[11px] text-neutral-400 sm:self-end">
+            <label class="flex items-center gap-1.5 cursor-pointer select-none">
+              <input type="checkbox" id="xgb-auto-toggle" checked class="accent-brand-yellow rounded">
+              <span>Auto-diagnóstico (cada 6s)</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card Principal de Resultados de la Inferencia -->
+      <div class="mt-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- Izquierda: Estado y Mensaje Diagnóstico Solicitado (col 8) -->
+        <div class="lg:col-span-8 flex flex-col justify-between p-4 rounded-xl bg-neutral-950/60 border border-neutral-800/60 transition-all" id="xgb-card-status">
+          <div>
+            <div class="flex items-center justify-between gap-3 mb-2.5">
+              <div class="flex items-center gap-2">
+                <span id="xgb-status-icon-wrap" class="p-1.5 rounded-md bg-brand-yellow/15 text-brand-yellow flex items-center justify-center">
+                  <i data-lucide="alert-triangle" id="xgb-status-icon" class="w-4 h-4"></i>
+                </span>
+                <span id="xgb-status-title" class="font-bold text-sm tracking-wide text-white uppercase font-mono">
+                  Mantenimiento Requerido
+                </span>
+              </div>
+              <span id="xgb-anomaly-score" class="text-xs font-mono px-2 py-0.5 rounded bg-brand-yellow/20 text-brand-yellow font-bold border border-brand-yellow/30">
+                Score: 0.82
+              </span>
+            </div>
+
+            <!-- MENSAJE DINÁMICO DE DIAGNÓSTICO -->
+            <p id="xgb-diagnostic-message" class="text-sm sm:text-[15px] font-sans text-neutral-100 leading-relaxed font-normal bg-neutral-900/60 p-3 rounded-lg border border-neutral-800/80">
+              El panel ocupa mantenimiento dado el comportamiento de corriente fotovoltaica reducida y baja potencia generada frente a la irradiancia actual.
+            </p>
+
+            <!-- Badges de variables afectadas -->
+            <div class="mt-3 flex flex-wrap items-center gap-1.5" id="xgb-affected-vars-container">
+              <span class="text-[11px] text-neutral-400 font-mono mr-1">Variables anómalas:</span>
+              <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-brand-yellow/10 text-brand-yellow border border-brand-yellow/20">Corriente fotovoltaica reducida</span>
+              <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-brand-yellow/10 text-brand-yellow border border-brand-yellow/20">Baja potencia generada</span>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-neutral-900 flex items-center text-[11px] font-mono text-neutral-500">
+            <span id="xgb-last-timestamp">Última inferencia: Sincronizando...</span>
+          </div>
+        </div>
+
+        <!-- Derecha: Vector de Variables de Telemetría (Input Features) (col 4) -->
+        <div class="lg:col-span-4 p-4 rounded-xl bg-neutral-950/60 border border-neutral-800/60 flex flex-col justify-between">
+          <div>
+            <div class="text-xs font-mono text-neutral-400 uppercase tracking-wider mb-2.5">
+              <span>Input Features</span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div class="p-2.5 rounded-lg bg-neutral-900/40 border border-neutral-800/60">
+                <span class="text-[10px] text-neutral-400 block">Voltaje (V)</span>
+                <span class="font-bold text-white text-sm" id="xgb-feat-v">-- V</span>
+              </div>
+              <div class="p-2.5 rounded-lg bg-neutral-900/40 border border-neutral-800/60">
+                <span class="text-[10px] text-neutral-400 block">Corriente (I)</span>
+                <span class="font-bold text-white text-sm" id="xgb-feat-i">-- A</span>
+              </div>
+              <div class="p-2.5 rounded-lg bg-neutral-900/40 border border-neutral-800/60">
+                <span class="text-[10px] text-neutral-400 block">Potencia (P)</span>
+                <span class="font-bold text-white text-sm" id="xgb-feat-p">-- W</span>
+              </div>
+              <div class="p-2.5 rounded-lg bg-neutral-900/40 border border-neutral-800/60">
+                <span class="text-[10px] text-neutral-400 block">Irradiancia (G)</span>
+                <span class="font-bold text-white text-sm" id="xgb-feat-irr">-- W/m²</span>
+              </div>
+              <div class="p-2.5 rounded-lg bg-neutral-900/40 border border-neutral-800/60">
+                <span class="text-[10px] text-neutral-400 block">Temperatura (T)</span>
+                <span class="font-bold text-white text-sm" id="xgb-feat-temp">-- °C</span>
+              </div>
+              <div class="p-2.5 rounded-lg bg-neutral-900/40 border border-neutral-800/60">
+                <span class="text-[10px] text-neutral-400 block">Humedad (RH)</span>
+                <span class="font-bold text-white text-sm" id="xgb-feat-hum">-- %</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-3 pt-2 text-[10px] font-mono text-neutral-500 border-t border-neutral-900 flex flex-wrap justify-between items-center gap-2">
+            <span>Eficiencia: <span id="xgb-eff-stat" class="text-brand-yellow font-bold">--%</span> <span class="text-neutral-500">(Nom: 20.5%)</span></span>
+            <div class="flex items-center gap-3">
+              <span>Confianza: <span id="xgb-confidence" class="text-neutral-300 font-bold">--%</span></span>
+              <span>Latencia: <span id="xgb-latency" class="text-neutral-300 font-bold">-- ms</span></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ================= FOOTER (Semiconductores PBL - Key Institute) ================= -->
+  <footer class="bg-brand-dark py-8 px-4 text-center">
+    <p class="text-xs font-mono text-neutral-500 tracking-wider">
+      Semiconductores PBL - Key Institute
+    </p>
+  </footer>
+
+  <!-- ================= JAVASCRIPT LOGIC ================= -->
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // SAMPLING CONFIGURATION: 2 SECONDS (2000ms)
+    const SAMPLING_INTERVAL_MS = 2000;
+    const MAX_POINTS = 12;
+
+    // Nominal Panel Specifications (STC: 1000 W/m², 25°C)
+    const NOMINAL_EFFICIENCY_PCT = 20.5;
+    const PANEL_AREA_M2 = 0.50; // Área activa de panel de 100W nominal
+    
+    // State storage for rolling real-time stream
+    const historyData = {
+      timestamps: [],
+      voltage: [],
+      current: [],
+      power: [],
+      irradiance: [],
+      temperature: [],
+      humidity: [],
+      efficiency: []
+    };
+
+    // Active timeframe filter per chart ('actual', 'hora', 'dia', 'semana', 'mes')
+    const chartTimeframes = {
+      vc: 'actual',
+      irr: 'actual',
+      th: 'actual'
+    };
+
+    // Series visibility tracker for interactive clickable legend
+    const seriesVisibility = {
+      'Voltaje (V)': true,
+      'Corriente (A)': true,
+      'Temperatura (°C)': true,
+      'Humedad (%)': true
+    };
+
+    let peakVoc = 0;
+    let peakIsc = 0;
+    let accumulatedWh = 0;
+
+    // Connection configuration & references
+    let currentMode = 'sim';
+    let currentSocket = null;
+    let httpInterval = null;
+    let serialPort = null;
+    let serialReader = null;
+    let selectedBaudRate = 115200;
+    let simInterval = null;
+    let fbInterval = null;
+    let fbLastKey = null;
+    let fbOnline = false;
+    let isConnected = true; // Starts in active demo mode
+
+    // ================= 1. APEXCHARTS CONFIGURATION =================
+
+    const baseChartOptions = {
+      chart: {
+        background: 'transparent',
+        toolbar: { show: false },
+        animations: {
+          enabled: true,
+          easing: 'linear',
+          dynamicAnimation: { speed: 800 }
+        },
+        fontFamily: 'Inter, sans-serif'
+      },
+      dataLabels: {
+        enabled: false
+      },
+      theme: { mode: 'dark' },
+      grid: {
+        borderColor: '#1f1f24',
+        strokeDashArray: 3,
+        xaxis: { lines: { show: false } },
+        yaxis: { lines: { show: true } }
+      },
+      stroke: {
+        curve: 'smooth',
+        width: 2.5
+      },
+      tooltip: {
+        theme: 'dark',
+        shared: true,
+        x: { format: 'HH:mm:ss' },
+        y: {
+          formatter: val => typeof val === 'number' ? val.toFixed(2) : val
+        }
+      }
+    };
+
+    // Chart 1: Voltage & Current (Dual Y-Axis)
+    const voltageCurrentOptions = {
+      ...baseChartOptions,
+      dataLabels: { enabled: false },
+      series: [
+        { name: 'Voltaje (V)', data: [] },
+        { name: 'Corriente (A)', data: [] }
+      ],
+      colors: ['#FFDE00', '#FFFFFF'],
+      chart: {
+        ...baseChartOptions.chart,
+        id: 'chart-vc',
+        type: 'line',
+        height: 330
+      },
+      xaxis: {
+        type: 'category',
+        categories: [],
+        tickAmount: 6,
+        labels: {
+          rotate: 0,
+          rotateAlways: false,
+          hideOverlappingLabels: true,
+          showDuplicates: false,
+          style: { colors: '#71717a', fontSize: '11px', fontFamily: 'JetBrains Mono' },
+          formatter: val => val ? val.split(':').slice(1).join(':') : ''
+        },
+        axisBorder: { color: '#1f1f24' },
+        axisTicks: { show: false }
+      },
+      yaxis: [
+        {
+          title: {
+            text: 'Voltaje (V)',
+            style: { color: '#FFDE00', fontSize: '11px', fontFamily: 'JetBrains Mono' }
+          },
+          min: 0,
+          max: 30,
+          labels: {
+            style: { colors: '#FFDE00', fontFamily: 'JetBrains Mono' },
+            formatter: val => Number(val).toFixed(1) + ' V'
+          }
+        },
+        {
+          opposite: true,
+          title: {
+            text: 'Corriente (A)',
+            style: { color: '#e4e4e7', fontSize: '11px', fontFamily: 'JetBrains Mono' }
+          },
+          min: 0,
+          max: 10,
+          labels: {
+            style: { colors: '#e4e4e7', fontFamily: 'JetBrains Mono' },
+            formatter: val => Number(val).toFixed(2) + ' A'
+          }
+        }
+      ],
+      legend: { show: false }
+    };
+    const chartVC = new ApexCharts(document.querySelector("#chart-voltage-current"), voltageCurrentOptions);
+    chartVC.render();
+
+    // Chart 2: Irradiance Area Chart
+    const irradianceOptions = {
+      ...baseChartOptions,
+      dataLabels: { enabled: false },
+      series: [
+        { name: 'Irradiancia (W/m²)', data: [] }
+      ],
+      colors: ['#FFDE00'],
+      chart: {
+        ...baseChartOptions.chart,
+        id: 'chart-irr',
+        type: 'area',
+        height: 240
+      },
+      fill: {
+        type: 'gradient',
+        gradient: {
+          shadeIntensity: 1,
+          opacityFrom: 0.4,
+          opacityTo: 0.02,
+          stops: [0, 90, 100]
+        }
+      },
+      xaxis: {
+        type: 'category',
+        categories: [],
+        tickAmount: 6,
+        labels: {
+          rotate: 0,
+          rotateAlways: false,
+          hideOverlappingLabels: true,
+          showDuplicates: false,
+          style: { colors: '#71717a', fontSize: '11px', fontFamily: 'JetBrains Mono' },
+          formatter: val => val ? val.split(':').slice(1).join(':') : ''
+        },
+        axisBorder: { color: '#1f1f24' },
+        axisTicks: { show: false }
+      },
+      yaxis: {
+        min: 0,
+        max: 1200,
+        labels: {
+          style: { colors: '#71717a', fontFamily: 'JetBrains Mono' },
+          formatter: val => Math.round(val)
+        }
+      },
+      tooltip: {
+        ...baseChartOptions.tooltip,
+        y: {
+          formatter: val => Math.round(val) + ' W/m²'
+        }
+      },
+      legend: { show: false }
+    };
+    const chartIrr = new ApexCharts(document.querySelector("#chart-irradiance"), irradianceOptions);
+    chartIrr.render();
+
+    // Chart 3: Temperature & Humidity
+    const tempHumidityOptions = {
+      ...baseChartOptions,
+      dataLabels: { enabled: false },
+      series: [
+        { name: 'Temperatura (°C)', data: [] },
+        { name: 'Humedad (%)', data: [] }
+      ],
+      colors: ['#FFDE00', '#22d3ee'],
+      chart: {
+        ...baseChartOptions.chart,
+        id: 'chart-th',
+        type: 'line',
+        height: 240
+      },
+      xaxis: {
+        type: 'category',
+        categories: [],
+        tickAmount: 6,
+        labels: {
+          rotate: 0,
+          rotateAlways: false,
+          hideOverlappingLabels: true,
+          showDuplicates: false,
+          style: { colors: '#71717a', fontSize: '11px', fontFamily: 'JetBrains Mono' },
+          formatter: val => val ? val.split(':').slice(1).join(':') : ''
+        },
+        axisBorder: { color: '#1f1f24' },
+        axisTicks: { show: false }
+      },
+      yaxis: [
+        {
+          title: { text: 'Temp (°C)', style: { color: '#FFDE00', fontFamily: 'JetBrains Mono', fontSize: '10px' } },
+          min: 10,
+          max: 60,
+          labels: { style: { colors: '#FFDE00', fontFamily: 'JetBrains Mono' }, formatter: val => Number(val).toFixed(0) + '°C' }
+        },
+        {
+          opposite: true,
+          title: { text: 'Humedad (%)', style: { color: '#22d3ee', fontFamily: 'JetBrains Mono', fontSize: '10px' } },
+          min: 0,
+          max: 100,
+          labels: { style: { colors: '#22d3ee', fontFamily: 'JetBrains Mono' }, formatter: val => Number(val).toFixed(0) + '%' }
+        }
+      ],
+      legend: { show: false }
+    };
+    const chartTH = new ApexCharts(document.querySelector("#chart-temp-humidity"), tempHumidityOptions);
+    chartTH.render();
+
+    // ================= 2. INTERACTIVE LEGEND TOGGLER =================
+    function toggleChartSeries(chartKey, seriesName, btnId) {
+      const chartInstance = (chartKey === 'vc') ? chartVC : chartTH;
+      if (!chartInstance) return;
+
+      chartInstance.toggleSeries(seriesName);
+      seriesVisibility[seriesName] = !seriesVisibility[seriesName];
+
+      const btn = document.getElementById(btnId);
+      if (btn) {
+        if (!seriesVisibility[seriesName]) {
+          btn.classList.add('opacity-30', 'line-through');
+        } else {
+          btn.classList.remove('opacity-30', 'line-through');
+        }
+      }
+    }
+
+    // ================= 3. HISTORICAL DATA FOR TIMEFRAMES =================
+    function getHistoricalData(chartKey, timeframe) {
+      if (timeframe === 'hora') {
+        const categories = ['00m', '05m', '10m', '15m', '20m', '25m', '30m', '35m', '40m', '45m', '50m', '55m'];
+        if (chartKey === 'vc') {
+          return {
+            categories,
+            series: [
+              { name: 'Voltaje (V)', data: [20.4, 20.8, 21.1, 21.0, 20.7, 20.5, 20.9, 21.3, 21.5, 21.2, 20.9, 21.1] },
+              { name: 'Corriente (A)', data: [4.6, 4.8, 5.1, 5.0, 4.7, 4.5, 4.9, 5.2, 5.4, 5.1, 4.8, 5.0] }
+            ]
+          };
+        } else if (chartKey === 'irr') {
+          return {
+            categories,
+            series: [{ name: 'Irradiancia (W/m²)', data: [780, 810, 850, 840, 790, 760, 820, 890, 920, 880, 830, 860] }]
+          };
+        } else if (chartKey === 'th') {
+          return {
+            categories,
+            series: [
+              { name: 'Temperatura (°C)', data: [31.2, 31.8, 32.5, 33.1, 33.4, 33.0, 32.8, 33.5, 34.1, 33.8, 33.4, 33.2] },
+              { name: 'Humedad (%)', data: [51, 50, 48, 47, 46, 47, 48, 46, 44, 45, 47, 48] }
+            ]
+          };
+        }
+      } else if (timeframe === 'dia') {
+        const categories = ['06h', '08h', '10h', '12h', '14h', '16h', '18h', '20h'];
+        if (chartKey === 'vc') {
+          return {
+            categories,
+            series: [
+              { name: 'Voltaje (V)', data: [12.2, 17.8, 21.4, 22.1, 21.8, 19.5, 14.1, 2.5] },
+              { name: 'Corriente (A)', data: [0.6, 2.8, 5.4, 6.2, 5.9, 4.1, 1.2, 0.0] }
+            ]
+          };
+        } else if (chartKey === 'irr') {
+          return {
+            categories,
+            series: [{ name: 'Irradiancia (W/m²)', data: [90, 420, 890, 1080, 1010, 680, 210, 0] }]
+          };
+        } else if (chartKey === 'th') {
+          return {
+            categories,
+            series: [
+              { name: 'Temperatura (°C)', data: [21.5, 25.0, 31.2, 36.8, 38.4, 34.2, 28.1, 24.0] },
+              { name: 'Humedad (%)', data: [74, 63, 49, 36, 33, 42, 58, 69] }
+            ]
+          };
+        }
+      } else if (timeframe === 'semana') {
+        const categories = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+        if (chartKey === 'vc') {
+          return {
+            categories,
+            series: [
+              { name: 'Voltaje (V)', data: [20.8, 19.4, 21.2, 21.9, 18.7, 21.5, 21.0] },
+              { name: 'Corriente (A)', data: [5.1, 4.2, 5.3, 5.6, 3.8, 5.4, 5.0] }
+            ]
+          };
+        } else if (chartKey === 'irr') {
+          return {
+            categories,
+            series: [{ name: 'Irradiancia (W/m²)', data: [860, 690, 910, 960, 580, 920, 840] }]
+          };
+        } else if (chartKey === 'th') {
+          return {
+            categories,
+            series: [
+              { name: 'Temperatura (°C)', data: [32.4, 29.8, 33.5, 35.1, 28.9, 34.2, 33.0] },
+              { name: 'Humedad (%)', data: [47, 58, 44, 40, 62, 42, 46] }
+            ]
+          };
+        }
+      } else if (timeframe === 'mes') {
+        const categories = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'];
+        if (chartKey === 'vc') {
+          return {
+            categories,
+            series: [
+              { name: 'Voltaje (V)', data: [20.6, 21.1, 20.4, 21.3] },
+              { name: 'Corriente (A)', data: [4.9, 5.2, 4.7, 5.3] }
+            ]
+          };
+        } else if (chartKey === 'irr') {
+          return {
+            categories,
+            series: [{ name: 'Irradiancia (W/m²)', data: [840, 890, 780, 910] }]
+          };
+        } else if (chartKey === 'th') {
+          return {
+            categories,
+            series: [
+              { name: 'Temperatura (°C)', data: [31.5, 33.2, 30.8, 33.9] },
+              { name: 'Humedad (%)', data: [49, 44, 53, 42] }
+            ]
+          };
+        }
+      }
+      return null;
+    }
+
+    // ================= 4. MOVING AVERAGE / PERCENTAGE TRENDS =================
+    const baselineTrends = {
+      voltage: {
+        hora: { pct: '1.8', isUp: true },
+        dia: { pct: '3.4', isUp: true },
+        semana: { pct: '0.9', isUp: false },
+        mes: { pct: '2.5', isUp: true }
+      },
+      current: {
+        hora: { pct: '2.5', isUp: true },
+        dia: { pct: '5.2', isUp: true },
+        semana: { pct: '1.4', isUp: false },
+        mes: { pct: '4.1', isUp: true }
+      },
+      power: {
+        hora: { pct: '4.3', isUp: true },
+        dia: { pct: '8.7', isUp: true },
+        semana: { pct: '2.3', isUp: false },
+        mes: { pct: '6.8', isUp: true }
+      },
+      irradiance: {
+        hora: { pct: '3.9', isUp: true },
+        dia: { pct: '7.8', isUp: true },
+        semana: { pct: '3.1', isUp: false },
+        mes: { pct: '5.2', isUp: true }
+      },
+      climate: {
+        hora: { pct: '1.2', isUp: true },
+        dia: { pct: '4.6', isUp: true },
+        semana: { pct: '0.8', isUp: true },
+        mes: { pct: '2.1', isUp: false }
+      }
+    };
+
+    function calculateTrend(historyArray, timeframe, fallbackTrend) {
+      if (timeframe === 'actual') {
+        if (historyArray.length < 4) {
+          return { pct: (0.4).toFixed(1), isUp: true, label: 'vs ciclo' };
+        }
+        const recent = historyArray.slice(-3);
+        const prev = historyArray.slice(-6, -3);
+        const avgRecent = recent.reduce((a, b) => a + b, 0) / recent.length;
+        const avgPrev = prev.length ? (prev.reduce((a, b) => a + b, 0) / prev.length) : avgRecent;
+        
+        const diff = avgPrev !== 0 ? (((avgRecent - avgPrev) / avgPrev) * 100) : 0;
+        return {
+          pct: Math.abs(diff).toFixed(1),
+          isUp: diff >= 0,
+          label: 'vs ciclo'
+        };
+      } else if (timeframe === 'hora') {
+        return { pct: fallbackTrend.hora.pct, isUp: fallbackTrend.hora.isUp, label: 'vs hora ant.' };
+      } else if (timeframe === 'dia') {
+        return { pct: fallbackTrend.dia.pct, isUp: fallbackTrend.dia.isUp, label: 'vs día ant.' };
+      } else if (timeframe === 'semana') {
+        return { pct: fallbackTrend.semana.pct, isUp: fallbackTrend.semana.isUp, label: 'vs sem ant.' };
+      } else if (timeframe === 'mes') {
+        return { pct: fallbackTrend.mes.pct, isUp: fallbackTrend.mes.isUp, label: 'vs mes ant.' };
+      }
+    }
+
+    function updateCardTrendBadge(elementId, trendInfo) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+
+      const sign = trendInfo.isUp ? '+' : '-';
+      const colorClass = trendInfo.isUp ? 'text-emerald-400' : 'text-rose-400';
+      const iconName = trendInfo.isUp ? 'trending-up' : 'trending-down';
+
+      // Clean comparativo porcentual: NO Variación text!
+      el.className = `${colorClass} font-semibold font-mono text-xs flex items-center gap-1 leading-none`;
+      el.innerHTML = `
+        <i data-lucide="${iconName}" class="w-3.5 h-3.5"></i>
+        <span>${sign}${trendInfo.pct}% ${trendInfo.label}</span>
+      `;
+    }
+
+    function refreshAllTrendBadges() {
+      const vTrend = calculateTrend(historyData.voltage, chartTimeframes.vc, baselineTrends.voltage);
+      updateCardTrendBadge('trend-voltage-val', vTrend);
+
+      const iTrend = calculateTrend(historyData.current, chartTimeframes.vc, baselineTrends.current);
+      updateCardTrendBadge('trend-current-val', iTrend);
+
+      const pTrend = calculateTrend(historyData.power, chartTimeframes.vc, baselineTrends.power);
+      updateCardTrendBadge('trend-power-val', pTrend);
+
+      const irrTrend = calculateTrend(historyData.irradiance, chartTimeframes.irr, baselineTrends.irradiance);
+      updateCardTrendBadge('trend-irradiance-val', irrTrend);
+
+      const climTrend = calculateTrend(historyData.temperature, chartTimeframes.th, baselineTrends.climate);
+      updateCardTrendBadge('trend-climate-val', climTrend);
+
+      lucide.createIcons();
+    }
+
+    // ================= 5. TIMEFRAME FILTER HANDLER =================
+    function changeTimeframe(chartKey, timeframe, btnElement) {
+      chartTimeframes[chartKey] = timeframe;
+
+      const buttons = document.querySelectorAll(`.time-btn-${chartKey}`);
+      buttons.forEach(b => {
+        b.className = `time-btn-${chartKey} px-2.5 py-1 rounded text-neutral-400 hover:text-white transition`;
+      });
+      btnElement.className = `time-btn-${chartKey} px-2.5 py-1 rounded bg-brand-yellow text-black font-semibold transition active-btn`;
+
+      if (timeframe === 'actual') {
+        if (chartKey === 'vc') {
+          chartVC.updateSeries([
+            { name: 'Voltaje (V)', data: historyData.voltage },
+            { name: 'Corriente (A)', data: historyData.current }
+          ]);
+          chartVC.updateOptions({ xaxis: { categories: historyData.timestamps } });
+
+          if (historyData.voltage.length) {
+            document.getElementById('val-voltage').innerText = historyData.voltage.slice(-1)[0].toFixed(2);
+            document.getElementById('val-current').innerText = historyData.current.slice(-1)[0].toFixed(2);
+            document.getElementById('val-power').innerText = historyData.power.slice(-1)[0].toFixed(1);
+          }
+        } else if (chartKey === 'irr') {
+          chartIrr.updateSeries([{ name: 'Irradiancia (W/m²)', data: historyData.irradiance }]);
+          chartIrr.updateOptions({ xaxis: { categories: historyData.timestamps } });
+
+          if (historyData.irradiance.length) {
+            const lastIrr = historyData.irradiance.slice(-1)[0];
+            document.getElementById('val-irradiance').innerText = Math.round(lastIrr);
+            document.getElementById('irr-percentage').innerText = Math.min(100, Math.round((lastIrr / 1200) * 100)) + '%';
+            document.getElementById('irr-progress-bar').style.width = Math.min(100, Math.round((lastIrr / 1200) * 100)) + '%';
+          }
+        } else if (chartKey === 'th') {
+          chartTH.updateSeries([
+            { name: 'Temperatura (°C)', data: historyData.temperature },
+            { name: 'Humedad (%)', data: historyData.humidity }
+          ]);
+          chartTH.updateOptions({ xaxis: { categories: historyData.timestamps } });
+
+          if (historyData.temperature.length) {
+            document.getElementById('val-temperature').innerText = historyData.temperature.slice(-1)[0].toFixed(1);
+            document.getElementById('val-humidity').innerText = Math.round(historyData.humidity.slice(-1)[0]);
+          }
+        }
+      } else {
+        const data = getHistoricalData(chartKey, timeframe);
+        if (data) {
+          if (chartKey === 'vc') {
+            chartVC.updateSeries(data.series);
+            chartVC.updateOptions({ xaxis: { categories: data.categories } });
+
+            const avgV = data.series[0].data.reduce((a, b) => a + b, 0) / data.series[0].data.length;
+            const avgI = data.series[1].data.reduce((a, b) => a + b, 0) / data.series[1].data.length;
+            const avgP = avgV * avgI;
+
+            document.getElementById('val-voltage').innerText = avgV.toFixed(2);
+            document.getElementById('val-current').innerText = avgI.toFixed(2);
+            document.getElementById('val-power').innerText = avgP.toFixed(1);
+          } else if (chartKey === 'irr') {
+            chartIrr.updateSeries(data.series);
+            chartIrr.updateOptions({ xaxis: { categories: data.categories } });
+
+            const avgIrr = data.series[0].data.reduce((a, b) => a + b, 0) / data.series[0].data.length;
+            document.getElementById('val-irradiance').innerText = Math.round(avgIrr);
+            document.getElementById('irr-percentage').innerText = Math.min(100, Math.round((avgIrr / 1200) * 100)) + '%';
+            document.getElementById('irr-progress-bar').style.width = Math.min(100, Math.round((avgIrr / 1200) * 100)) + '%';
+          } else if (chartKey === 'th') {
+            chartTH.updateSeries(data.series);
+            chartTH.updateOptions({ xaxis: { categories: data.categories } });
+
+            const avgT = data.series[0].data.reduce((a, b) => a + b, 0) / data.series[0].data.length;
+            const avgH = data.series[1].data.reduce((a, b) => a + b, 0) / data.series[1].data.length;
+            document.getElementById('val-temperature').innerText = avgT.toFixed(1);
+            document.getElementById('val-humidity').innerText = Math.round(avgH);
+          }
+        }
+
+        // Actualizar métricas de eficiencia en ventanas históricas
+        const curP = Number(document.getElementById('val-power').innerText) || 0;
+        const curIrr = Number(document.getElementById('val-irradiance').innerText) || 0;
+        const histEff = curIrr > 30 ? Math.min(25.0, (curP / (curIrr * PANEL_AREA_M2)) * 100) : 0.0;
+        const histRatio = Math.min(100, Math.round((histEff / NOMINAL_EFFICIENCY_PCT) * 100));
+
+        const valEffReal = document.getElementById('val-efficiency-real');
+        if (valEffReal) valEffReal.innerText = histEff.toFixed(1);
+        const valEffRatio = document.getElementById('val-efficiency-ratio');
+        if (valEffRatio) valEffRatio.innerText = 'PR ' + histRatio + '%';
+        const effBar = document.getElementById('eff-progress-bar');
+        if (effBar) effBar.style.width = histRatio + '%';
+        const chartEffDisp = document.getElementById('chart-eff-display');
+        if (chartEffDisp) chartEffDisp.innerHTML = `${histEff.toFixed(1)}% <span class="text-neutral-500 font-normal">/ ${NOMINAL_EFFICIENCY_PCT.toFixed(1)}%</span>`;
+        const chartEffBar = document.getElementById('chart-eff-progress-bar');
+        if (chartEffBar) chartEffBar.style.width = histRatio + '%';
+        const chartEffRatio = document.getElementById('chart-eff-ratio');
+        if (chartEffRatio) chartEffRatio.innerText = 'PR: ' + histRatio + '%';
+
+        const effDelta = histEff - NOMINAL_EFFICIENCY_PCT;
+        const effDeltaEl = document.getElementById('val-efficiency-delta');
+        if (effDeltaEl) {
+          effDeltaEl.innerText = (effDelta >= 0 ? '+' : '') + effDelta.toFixed(1) + '%';
+          effDeltaEl.className = effDelta >= -2.0 ? 'font-semibold text-emerald-400' : 'font-semibold text-rose-400';
+        }
+      }
+
+      refreshAllTrendBadges();
+    }
+
+    // ================= 6. DATA PROCESSOR & UI UPDATER =================
+    function processIncomingTelemetry(data) {
+      const voltage = Number(data.voltage ?? data.v ?? 0);
+      const current = Number(data.current ?? data.i ?? 0);
+      const irradiance = Number(data.irradiance ?? data.irr ?? 0);
+      const temperature = Number(data.temperature ?? data.temp ?? 0);
+      const humidity = Number(data.humidity ?? data.hum ?? 0);
+
+      const power = voltage * current;
+      accumulatedWh += (power * (SAMPLING_INTERVAL_MS / 3600000));
+
+      // Cálculo de Eficiencia Real y Performance Ratio (PR) vs Nominal STC (20.5%)
+      const realEff = irradiance > 30 ? Math.min(25.0, (power / (irradiance * PANEL_AREA_M2)) * 100) : 0.0;
+      const effRatio = NOMINAL_EFFICIENCY_PCT > 0 ? Math.min(100, Math.round((realEff / NOMINAL_EFFICIENCY_PCT) * 100)) : 0;
+
+      if (voltage > peakVoc) peakVoc = voltage;
+      if (current > peakIsc) peakIsc = current;
+
+      const nowStr = new Date().toTimeString().split(' ')[0];
+      historyData.timestamps.push(nowStr);
+      historyData.voltage.push(Number(voltage.toFixed(2)));
+      historyData.current.push(Number(current.toFixed(2)));
+      historyData.power.push(Number(power.toFixed(1)));
+      historyData.irradiance.push(Math.round(irradiance));
+      historyData.temperature.push(Number(temperature.toFixed(1)));
+      historyData.humidity.push(Math.round(humidity));
+      historyData.efficiency.push(Number(realEff.toFixed(1)));
+
+      if (historyData.timestamps.length > MAX_POINTS) {
+        historyData.timestamps.shift();
+        historyData.voltage.shift();
+        historyData.current.shift();
+        historyData.power.shift();
+        historyData.irradiance.shift();
+        historyData.temperature.shift();
+        historyData.humidity.shift();
+        historyData.efficiency.shift();
+      }
+
+      if (chartTimeframes.vc === 'actual') {
+        document.getElementById('val-voltage').innerText = voltage.toFixed(2);
+        document.getElementById('val-current').innerText = current.toFixed(2);
+        document.getElementById('val-power').innerText = power.toFixed(1);
+
+        chartVC.updateSeries([
+          { name: 'Voltaje (V)', data: historyData.voltage },
+          { name: 'Corriente (A)', data: historyData.current }
+        ]);
+        chartVC.updateOptions({ xaxis: { categories: historyData.timestamps } });
+      }
+
+      if (chartTimeframes.irr === 'actual') {
+        document.getElementById('val-irradiance').innerText = Math.round(irradiance);
+        const irrPercent = Math.min(100, Math.round((irradiance / 1200) * 100));
+        document.getElementById('irr-percentage').innerText = irrPercent + '%';
+        document.getElementById('irr-progress-bar').style.width = irrPercent + '%';
+
+        chartIrr.updateSeries([{ name: 'Irradiancia (W/m²)', data: historyData.irradiance }]);
+        chartIrr.updateOptions({ xaxis: { categories: historyData.timestamps } });
+      }
+
+      // Actualizar tarjeta y widgets de Eficiencia Real vs Nominal en tiempo real
+      const valEffReal = document.getElementById('val-efficiency-real');
+      if (valEffReal) valEffReal.innerText = realEff.toFixed(1);
+      const valEffNom = document.getElementById('val-efficiency-nominal');
+      if (valEffNom) valEffNom.innerText = NOMINAL_EFFICIENCY_PCT.toFixed(1) + '%';
+      const valEffRatio = document.getElementById('val-efficiency-ratio');
+      if (valEffRatio) valEffRatio.innerText = 'PR ' + effRatio + '%';
+      const effBar = document.getElementById('eff-progress-bar');
+      if (effBar) effBar.style.width = effRatio + '%';
+
+      const chartEffDisp = document.getElementById('chart-eff-display');
+      if (chartEffDisp) chartEffDisp.innerHTML = `${realEff.toFixed(1)}% <span class="text-neutral-500 font-normal">/ ${NOMINAL_EFFICIENCY_PCT.toFixed(1)}%</span>`;
+      const chartEffBar = document.getElementById('chart-eff-progress-bar');
+      if (chartEffBar) chartEffBar.style.width = effRatio + '%';
+      const chartEffRatio = document.getElementById('chart-eff-ratio');
+      if (chartEffRatio) chartEffRatio.innerText = 'PR: ' + effRatio + '%';
+
+      const xgbEffStat = document.getElementById('xgb-eff-stat');
+      if (xgbEffStat) xgbEffStat.innerText = realEff.toFixed(1) + '%';
+
+      const effDelta = realEff - NOMINAL_EFFICIENCY_PCT;
+      const effDeltaEl = document.getElementById('val-efficiency-delta');
+      if (effDeltaEl) {
+        effDeltaEl.innerText = (effDelta >= 0 ? '+' : '') + effDelta.toFixed(1) + '%';
+        effDeltaEl.className = effDelta >= -2.0 ? 'font-semibold text-emerald-400' : 'font-semibold text-rose-400';
+      }
+
+      if (chartTimeframes.th === 'actual') {
+        document.getElementById('val-temperature').innerText = temperature.toFixed(1);
+        document.getElementById('val-humidity').innerText = Math.round(humidity);
+
+        chartTH.updateSeries([
+          { name: 'Temperatura (°C)', data: historyData.temperature },
+          { name: 'Humedad (%)', data: historyData.humidity }
+        ]);
+        chartTH.updateOptions({ xaxis: { categories: historyData.timestamps } });
+      }
+
+      refreshAllTrendBadges();
+    }
+
+    // ================= 7. CUSTOM SHADCN DROPDOWN LOGIC =================
+    function toggleConnDropdown(e) {
+      if (e) e.stopPropagation();
+      const menu = document.getElementById('conn-dropdown-menu');
+      const chevron = document.getElementById('conn-chevron');
+      const isClosed = menu.classList.contains('hidden');
+      if (isClosed) {
+        menu.classList.remove('hidden');
+        chevron.classList.add('rotate-180');
+      } else {
+        menu.classList.add('hidden');
+        chevron.classList.remove('rotate-180');
+      }
+    }
+
+    function toggleBaudDropdown(e) {
+      if (e) e.stopPropagation();
+      const menu = document.getElementById('baud-dropdown-menu');
+      const chevron = document.getElementById('baud-chevron');
+      if (!menu) return;
+      const isClosed = menu.classList.contains('hidden');
+      if (isClosed) {
+        menu.classList.remove('hidden');
+        if (chevron) chevron.classList.add('rotate-180');
+      } else {
+        menu.classList.add('hidden');
+        if (chevron) chevron.classList.remove('rotate-180');
+      }
+    }
+
+    async function setBaudRate(rate) {
+      selectedBaudRate = Number(rate);
+      const badge = document.getElementById('current-baud-badge');
+      if (badge) badge.innerText = `${selectedBaudRate} baud`;
+
+      [115200, 9600].forEach(r => {
+        const el = document.getElementById(`check-baud-${r}`);
+        if (el) {
+          if (r === selectedBaudRate) el.classList.remove('hidden');
+          else el.classList.add('hidden');
+        }
+      });
+
+      const menu = document.getElementById('baud-dropdown-menu');
+      if (menu) menu.classList.add('hidden');
+      const chevron = document.getElementById('baud-chevron');
+      if (chevron) chevron.classList.remove('rotate-180');
+
+      if (currentMode === 'serial' && isConnected) {
+        await startWebSerial();
+      }
+    }
+
+    document.addEventListener('click', (e) => {
+      const wrapper = document.getElementById('conn-dropdown-wrapper');
+      if (wrapper && !wrapper.contains(e.target)) {
+        document.getElementById('conn-dropdown-menu').classList.add('hidden');
+        document.getElementById('conn-chevron').classList.remove('rotate-180');
+      }
+      const baudWrapper = document.getElementById('baud-config-trigger');
+      if (baudWrapper && !baudWrapper.contains(e.target)) {
+        const baudMenu = document.getElementById('baud-dropdown-menu');
+        if (baudMenu) baudMenu.classList.add('hidden');
+        const baudChevron = document.getElementById('baud-chevron');
+        if (baudChevron) baudChevron.classList.remove('rotate-180');
+      }
+    });
+
+    function selectConnMode(mode, label) {
+      currentMode = mode;
+      
+      document.getElementById('conn-selected-text').innerHTML = `
+        <span class="w-1.5 h-1.5 rounded-full bg-brand-yellow"></span>
+        ${label}
+      `;
+
+      ['sim', 'ws', 'http', 'serial', 'firebase'].forEach(m => {
+        const el = document.getElementById(`check-${m}`);
+        if (el) {
+          if (m === mode) el.classList.remove('hidden');
+          else el.classList.add('hidden');
+        }
+      });
+
+      document.getElementById('conn-dropdown-menu').classList.add('hidden');
+      document.getElementById('conn-chevron').classList.remove('rotate-180');
+
+      const ipTrigger = document.getElementById('ip-config-trigger');
+      const baudTrigger = document.getElementById('baud-config-trigger');
+
+      if (mode === 'ws' || mode === 'http') {
+        ipTrigger.classList.remove('hidden');
+        ipTrigger.classList.add('flex');
+        if (baudTrigger) {
+          baudTrigger.classList.add('hidden');
+          baudTrigger.classList.remove('flex');
+        }
+        openIpOverlay();
+      } else if (mode === 'serial') {
+        ipTrigger.classList.add('hidden');
+        ipTrigger.classList.remove('flex');
+        if (baudTrigger) {
+          baudTrigger.classList.remove('hidden');
+          baudTrigger.classList.add('flex');
+        }
+        disconnectAll();
+        updateConnectionState(false);
+      } else {
+        ipTrigger.classList.add('hidden');
+        ipTrigger.classList.remove('flex');
+        if (baudTrigger) {
+          baudTrigger.classList.add('hidden');
+          baudTrigger.classList.remove('flex');
+        }
+        if (mode === 'firebase') startFirebase();
+        else startSimulation();
+      }
+    }
+
+    // ================= 8. IP OVERLAY POPUP HANDLERS =================
+    function openIpOverlay() {
+      const overlay = document.getElementById('ip-overlay');
+      const protocolLabel = document.getElementById('overlay-protocol-label');
+      const prefix = document.getElementById('overlay-prefix');
+
+      if (currentMode === 'http') {
+        protocolLabel.innerText = 'HTTP Poll (REST)';
+        prefix.innerText = 'http://';
+      } else {
+        protocolLabel.innerText = 'WebSocket (Wi-Fi)';
+        prefix.innerText = 'ws://';
+      }
+
+      overlay.classList.remove('hidden');
+      document.getElementById('esp-endpoint').focus();
+    }
+
+    function closeIpOverlay() {
+      document.getElementById('ip-overlay').classList.add('hidden');
+    }
+
+    function saveAndConnectFromOverlay() {
+      const endpoint = document.getElementById('esp-endpoint').value.trim();
+      if (!endpoint) return;
+
+      document.getElementById('current-ip-badge').innerText = endpoint;
+      closeIpOverlay();
+
+      if (currentMode === 'ws') {
+        startWebSocket(endpoint);
+      } else if (currentMode === 'http') {
+        startHttpPolling(endpoint);
+      }
+    }
+
+    // ================= 9. SINGLE CONECTADO / DESCONECTADO BUTTON TOGGLER =================
+    function updateConnectionState(connected) {
+      isConnected = connected;
+      const btn = document.getElementById('btn-connect');
+      const mobileStatusPill = document.getElementById('mobile-status-pill');
+
+      if (connected) {
+        // Contraste amarillo cuando está CONECTADO
+        btn.className = "bg-brand-yellow hover:bg-brand-yellowHover text-black font-semibold text-xs py-2 px-4 rounded flex items-center gap-2 transition active:scale-95 shadow-sm font-mono tracking-wide";
+        btn.innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-black animate-pulse"></span>
+          <span id="btn-connect-label">CONECTADO</span>
+        `;
+
+        if (mobileStatusPill) {
+          mobileStatusPill.className = "flex items-center gap-1.5 px-2.5 py-1 rounded border border-brand-yellow/30 text-[11px] font-mono text-black bg-brand-yellow font-bold";
+          mobileStatusPill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-black animate-pulse"></span><span>CONECTADO</span>';
+        }
+      } else {
+        // Gris-ish cuando está DESCONECTADO
+        btn.className = "bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 text-neutral-400 hover:text-white font-semibold text-xs py-2 px-4 rounded flex items-center gap-2 transition active:scale-95 font-mono tracking-wide";
+        btn.innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-neutral-600"></span>
+          <span id="btn-connect-label">DESCONECTADO</span>
+        `;
+
+        if (mobileStatusPill) {
+          mobileStatusPill.className = "flex items-center gap-1.5 px-2.5 py-1 rounded border border-neutral-800 text-[11px] font-mono text-neutral-400 bg-neutral-950";
+          mobileStatusPill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-neutral-600"></span><span>DESCONECTADO</span>';
+        }
+      }
+    }
+
+    async function toggleConnection() {
+      if (isConnected) {
+        await disconnectAll();
+        updateConnectionState(false);
+      } else {
+        const endpoint = document.getElementById('esp-endpoint').value.trim();
+
+        if (currentMode === 'sim') {
+          startSimulation();
+        } else if (currentMode === 'ws') {
+          startWebSocket(endpoint);
+        } else if (currentMode === 'http') {
+          startHttpPolling(endpoint);
+        } else if (currentMode === 'serial') {
+          await startWebSerial();
+        } else if (currentMode === 'firebase') {
+          startFirebase();
+        }
+      }
+    }
+
+    async function disconnectAll() {
+      if (simInterval) { clearInterval(simInterval); simInterval = null; }
+      if (httpInterval) { clearInterval(httpInterval); httpInterval = null; }
+      if (fbInterval) { clearInterval(fbInterval); fbInterval = null; }
+      if (currentSocket) {
+        try { currentSocket.close(); } catch(e){}
+        currentSocket = null;
+      }
+      if (serialReader) {
+        try {
+          await serialReader.cancel();
+          serialReader.releaseLock();
+        } catch(e){}
+        serialReader = null;
+      }
+      if (serialPort) {
+        try {
+          await serialPort.close();
+        } catch(e){}
+        serialPort = null;
+      }
+      isConnected = false;
+    }
+
+    // --- MODE 1: WEBSOCKET ---
+    function startWebSocket(ip) {
+      disconnectAll();
+      let url = ip;
+      if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
+        url = `ws://${ip}:81/ws`;
+      }
+
+      try {
+        currentSocket = new WebSocket(url);
+        currentSocket.onopen = () => {
+          updateConnectionState(true);
+        };
+        currentSocket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            processIncomingTelemetry(data);
+          } catch(e) {
+            console.warn("Dato no-JSON en WebSocket:", event.data);
+          }
+        };
+        currentSocket.onerror = (err) => {
+          console.error("WS Error:", err);
+          updateConnectionState(false);
+        };
+        currentSocket.onclose = () => {
+          updateConnectionState(false);
+        };
+      } catch (e) {
+        alert("Error al conectar WebSocket: " + e.message);
+        updateConnectionState(false);
+      }
+    }
+
+    // --- MODE 2: HTTP POLLING ---
+    function startHttpPolling(ip) {
+      disconnectAll();
+      updateConnectionState(true);
+      let url = ip;
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = `http://${ip}/data`;
+      }
+
+      const poll = async () => {
+        try {
+          const res = await fetch(url, { signal: AbortSignal.timeout(1800) });
+          const data = await res.json();
+          processIncomingTelemetry(data);
+        } catch(e) {
+          console.warn("Fallo polling HTTP:", e);
+        }
+      };
+      poll();
+      httpInterval = setInterval(poll, SAMPLING_INTERVAL_MS);
+    }
+
+    // --- MODE 3: WEBSERIAL (ARDUINO NANO / USB DIRECT) ---
+    let pendingSerialText = {
+      voltage: null,
+      current: null,
+      irradiance: null,
+      temperature: null,
+      humidity: null
+    };
+
+    function parseTelemetryLine(line) {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+
+      // 1. JSON Parsing (Formato nativo y de alta velocidad)
+      const jsonStart = trimmed.indexOf('{');
+      const jsonEnd = trimmed.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd > jsonStart) {
+        try {
+          const jsonStr = trimmed.slice(jsonStart, jsonEnd + 1);
+          const data = JSON.parse(jsonStr);
+          if (data.voltage !== undefined || data.v !== undefined || data.current !== undefined) {
+            processIncomingTelemetry(data);
+            return;
+          }
+        } catch(e){}
+      }
+
+      // 2. Parser de Respaldo para formato texto Arduino
+      // INA219 -> Voltaje: 19.50 V | Corriente: 2450.00 mA | Potencia: ...
+      const inaMatch = trimmed.match(/Voltaje:\s*([\d\.]+)\s*V.*?Corriente:\s*([\d\.-]+)\s*mA/i);
+      if (inaMatch) {
+        pendingSerialText.voltage = parseFloat(inaMatch[1]);
+        // Conversión crítica: mA a A
+        pendingSerialText.current = Math.max(0, parseFloat(inaMatch[2]) / 1000.0);
+      }
+
+      // Fototransistor -> Nivel de luz (0-1023): 680
+      const fotoMatch = trimmed.match(/Fototransistor.*?Nivel de luz.*?:\s*(\d+)/i);
+      if (fotoMatch) {
+        const rawLuz = parseInt(fotoMatch[1], 10);
+        pendingSerialText.irradiance = Math.min(1200, Math.round((rawLuz / 1023.0) * 1200.0));
+      }
+
+      // DS18B20 -> Temperatura: 34.25 °C
+      const dsMatch = trimmed.match(/DS18B20.*?Temperatura:\s*([\d\.-]+)/i);
+      if (dsMatch) {
+        pendingSerialText.temperature = parseFloat(dsMatch[1]);
+      }
+
+      // DHT11 -> Humedad: 45.00 % | Temperatura: 29.00 °C
+      const dhtHumMatch = trimmed.match(/Humedad:\s*([\d\.]+)\s*%/i);
+      if (dhtHumMatch) {
+        pendingSerialText.humidity = parseFloat(dhtHumMatch[1]);
+      }
+      const dhtTempMatch = trimmed.match(/DHT11.*?Temperatura:\s*([\d\.-]+)/i);
+      if (dhtTempMatch && pendingSerialText.temperature === null) {
+        pendingSerialText.temperature = parseFloat(dhtTempMatch[1]);
+      }
+
+      // Al detectar delimitador de bloque '----', emitir telemetría acumulada
+      if ((trimmed.includes('----') || trimmed.includes('===')) && pendingSerialText.voltage !== null) {
+        processIncomingTelemetry({
+          voltage: pendingSerialText.voltage ?? 0,
+          current: pendingSerialText.current ?? 0,
+          irradiance: pendingSerialText.irradiance ?? 0,
+          temperature: pendingSerialText.temperature ?? 25.0,
+          humidity: pendingSerialText.humidity ?? 50.0
+        });
+        pendingSerialText = { voltage: null, current: null, irradiance: null, temperature: null, humidity: null };
+      }
+    }
+
+    async function startWebSerial() {
+      await disconnectAll();
+      if (!('serial' in navigator)) {
+        alert("WebSerial no está disponible en este navegador.\nPor favor utiliza Google Chrome o Microsoft Edge en escritorio para conectar el Arduino Nano por USB.");
+        updateConnectionState(false);
+        return;
+      }
+
+      try {
+        const port = await navigator.serial.requestPort();
+        await port.open({ baudRate: selectedBaudRate });
+        serialPort = port;
+        updateConnectionState(true);
+
+        const decoder = new TextDecoder();
+        serialReader = port.readable.getReader();
+
+        let buffer = '';
+        while (true) {
+          const { value, done } = await serialReader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop(); // Mantener remanente parcial
+          for (const line of lines) {
+            parseTelemetryLine(line);
+          }
+        }
+      } catch (err) {
+        console.warn("Conexión WebSerial finalizada o cancelada:", err);
+        updateConnectionState(false);
+      } finally {
+        if (serialReader) {
+          try { serialReader.releaseLock(); } catch(e){}
+          serialReader = null;
+        }
+        if (serialPort) {
+          try { await serialPort.close(); } catch(e){}
+          serialPort = null;
+        }
+        updateConnectionState(false);
+      }
+    }
+
+    // Detección automática al desconectar físicamente el cable USB
+    if ('serial' in navigator) {
+      navigator.serial.addEventListener('disconnect', (event) => {
+        if (serialPort && event.target === serialPort) {
+          console.warn("Dispositivo Serial USB desconectado.");
+          disconnectAll();
+          updateConnectionState(false);
+        }
+      });
+    }
+
+    // --- MODE 4: REALISTIC SOLAR SIMULATION ---
+    let simStep = 0;
+    function startSimulation() {
+      disconnectAll();
+      updateConnectionState(true);
+
+      simInterval = setInterval(() => {
+        simStep += 0.05;
+
+        const cloudFactor = 0.85 + Math.sin(simStep * 0.7) * 0.15 + (Math.random() * 0.05 - 0.025);
+        const irradiance = Math.max(100, Math.min(1150, 950 * cloudFactor));
+        const voltage = 20.5 + Math.sin(simStep * 0.3) * 1.5 + (Math.random() * 0.3 - 0.15);
+        const current = Math.max(0.2, (irradiance / 1000) * 5.4 + (Math.random() * 0.15 - 0.07));
+        const temperature = 32.0 + (irradiance / 1000) * 14.0 + Math.sin(simStep * 0.2) * 1.2;
+        const humidity = Math.max(25, 60.0 - (temperature - 25.0) * 1.1 + (Math.random() * 2 - 1));
+
+        processIncomingTelemetry({
+          voltage,
+          current,
+          irradiance,
+          temperature,
+          humidity
+        });
+      }, SAMPLING_INTERVAL_MS);
+    }
+
+    // --- MODE 5: FIREBASE (Nano -> Bluetooth -> celular -> Firebase -> dashboard) ---
+    const FIREBASE_DB_URL = "https://semis-f1ac4-default-rtdb.firebaseio.com";
+    const FIREBASE_PATH = "lecturas";
+
+    // Convierte un registro de Firebase {volt, ma, luz, tds, hum, tdht} al formato del dashboard.
+    // Mismas conversiones que el parser WebSerial. -999 = sensor sin lectura.
+    function firebaseToTelemetry(r) {
+      const ok = (x) => typeof x === 'number' && isFinite(x) && x > -900;
+      if (!r || typeof r !== 'object' || !ok(r.volt) || !ok(r.ma)) return null;
+      return {
+        voltage: r.volt,
+        current: Math.max(0, r.ma / 1000.0), // mA -> A
+        irradiance: ok(r.luz) ? Math.min(1200, Math.round((r.luz / 1023.0) * 1200.0)) : 0,
+        temperature: ok(r.tds) ? r.tds : (ok(r.tdht) ? r.tdht : 25.0),
+        humidity: ok(r.hum) ? r.hum : 50.0
+      };
+    }
+
+    async function firebaseFetch(query) {
+      const res = await fetch(`${FIREBASE_DB_URL}/${FIREBASE_PATH}.json?${query}`, {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(4000)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }
+
+    function startFirebase() {
+      disconnectAll();
+      fbLastKey = null;
+      fbOnline = true;
+      updateConnectionState(true);
+
+      const poll = async () => {
+        try {
+          let obj;
+          if (fbLastKey === null) {
+            // Primera vez: solo se toma la última lectura como punto de partida,
+            // para no mostrar datos viejos como si fueran en vivo.
+            obj = await firebaseFetch('orderBy=%22%24key%22&limitToLast=1');
+            const keys = obj ? Object.keys(obj) : [];
+            fbLastKey = keys.length ? keys[keys.length - 1] : '';
+          } else {
+            const startAt = fbLastKey ? '&startAt=' + encodeURIComponent(JSON.stringify(fbLastKey)) : '';
+            obj = await firebaseFetch('orderBy=%22%24key%22' + startAt);
+            const keys = obj ? Object.keys(obj).sort() : [];
+            for (const k of keys) {
+              if (k === fbLastKey) continue;
+              fbLastKey = k;
+              const t = firebaseToTelemetry(obj[k]);
+              if (t) processIncomingTelemetry(t);
+            }
+          }
+          if (!fbOnline) { fbOnline = true; updateConnectionState(true); }
+        } catch (e) {
+          console.warn("Fallo polling Firebase:", e);
+          if (fbOnline) { fbOnline = false; updateConnectionState(false); }
+        }
+      };
+      poll();
+      fbInterval = setInterval(poll, SAMPLING_INTERVAL_MS);
+    }
+
+    // ================= 10. AUXILIARY UTILITIES =================
+    function resetChartData() {
+      historyData.timestamps = [];
+      historyData.voltage = [];
+      historyData.current = [];
+      historyData.power = [];
+      historyData.irradiance = [];
+      historyData.temperature = [];
+      historyData.humidity = [];
+      historyData.efficiency = [];
+      peakVoc = 0;
+      peakIsc = 0;
+      accumulatedWh = 0;
+      chartVC.updateSeries([{ data: [] }, { data: [] }]);
+      chartIrr.updateSeries([{ data: [] }]);
+      chartTH.updateSeries([{ data: [] }, { data: [] }]);
+      const valEff = document.getElementById('val-efficiency-real');
+      if (valEff) valEff.innerText = '0.0';
+      const effBar = document.getElementById('eff-progress-bar');
+      if (effBar) effBar.style.width = '0%';
+      const valDelta = document.getElementById('val-efficiency-delta');
+      if (valDelta) valDelta.innerText = '+0.0%';
+    }
+
+    // ================= 11. INFERENCIA PREDICTIVA XGBOOST & API HANDLER =================
+    let isXgbRunning = false;
+    let xgbInterval = null;
+
+    function toggleXgbSettings() {
+      const drawer = document.getElementById('xgb-settings-drawer');
+      drawer.classList.toggle('hidden');
+    }
+
+    function updateApiStatusBadge(isOnline, info = '') {
+      const dot = document.getElementById('xgb-api-dot');
+      const text = document.getElementById('xgb-api-text');
+      const badge = document.getElementById('xgb-api-badge');
+
+      if (isOnline) {
+        dot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
+        text.innerText = "API: Online (localhost:5000)";
+        badge.className = "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-950/20 text-[11px] font-mono text-emerald-400";
+      } else {
+        dot.className = "w-2 h-2 rounded-full bg-amber-400";
+        text.innerText = info || "API: En espera (Modo Base Local)";
+        badge.className = "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 text-[11px] font-mono text-neutral-400";
+      }
+    }
+
+    async function testApiConnection() {
+      const urlInput = document.getElementById('xgb-endpoint-url').value.trim();
+      let statusUrl = urlInput.replace('/predict', '/status');
+      try {
+        const res = await fetch(statusUrl, { signal: AbortSignal.timeout(2000) });
+        if (res.ok) {
+          const data = await res.json();
+          alert(`✅ Conexión exitosa con API XGBoost:\nServicio: ${data.service || 'Online'}\nVersión: ${data.version || '1.0'}`);
+          updateApiStatusBadge(true);
+        } else {
+          alert(`⚠️ El servidor respondió con código HTTP: ${res.status}`);
+          updateApiStatusBadge(false, `HTTP ${res.status}`);
+        }
+      } catch (err) {
+        alert(`❌ No se pudo conectar a ${statusUrl}.\n\nAsegúrate de ejecutar en terminal:\npython xgboost_api.py`);
+        updateApiStatusBadge(false, "Desconectada");
+      }
+    }
+
+    // Inferencia local de respaldo si el servidor Python no está activo aún
+    function evaluateLocalModelFallback(telemetry) {
+      const v = telemetry.voltage;
+      const i = telemetry.current;
+      const p = telemetry.power;
+      const irr = telemetry.irradiance;
+      const temp = telemetry.temperature;
+      const hum = telemetry.humidity;
+      const effReal = irr > 30 ? (p / (irr * PANEL_AREA_M2)) * 100 : 0;
+
+      const anomalies = [];
+      if (irr > 350 && i < (irr * 0.0035)) {
+        anomalies.push("corriente fotovoltaica reducida");
+      }
+      if (temp > 45.0 && v < 18.0 && irr > 400) {
+        anomalies.push("alta temperatura con caída de tensión");
+      }
+      if (irr > 300 && (effReal < 15.0 || p < ((irr / 1000.0) * 100.0 * 0.45))) {
+        anomalies.push(`baja eficiencia real (${effReal.toFixed(1)}% vs ${NOMINAL_EFFICIENCY_PCT}% nominal)`);
+      }
+      if (hum > 85.0 && temp < 18.0 && i < 0.8 && irr > 250) {
+        anomalies.push("humedad excesiva con condensación");
+      }
+
+      const maintenance = anomalies.length > 0;
+      let msg = "";
+      if (maintenance) {
+        msg = `El panel ocupa mantenimiento dado el comportamiento de ${anomalies.join(', ')}. Se sugiere inspección por ensuciamiento (soiling) o degradación en celdas.`;
+      } else {
+        msg = `El panel opera dentro de las curvas esperadas de generación (Eficiencia real: ${effReal.toFixed(1)}% vs ${NOMINAL_EFFICIENCY_PCT}% nominal). No se detectan anomalías en el vector de telemetría.`;
+      }
+
+      return {
+        model: "XGBoost Classifier",
+        maintenance_required: maintenance,
+        status: maintenance ? "Mantenimiento Requerido" : "Operación Óptima",
+        diagnostic_message: msg,
+        affected_variables: anomalies,
+        anomaly_score: maintenance ? Number(Math.min(0.96, 0.65 + anomalies.length * 0.12).toFixed(2)) : 0.14,
+        confidence_score: maintenance ? Number((88.0 + anomalies.length * 3.5).toFixed(1)) : 96.2,
+        efficiency: {
+          real: Number(effReal.toFixed(1)),
+          nominal: NOMINAL_EFFICIENCY_PCT
+        },
+        input_telemetry: telemetry,
+        timestamp: new Date().toLocaleTimeString()
+      };
+    }
+
+    async function triggerXGBoostInference(forceManual = false) {
+      if (isXgbRunning && !forceManual) return;
+      isXgbRunning = true;
+
+      const btn = document.getElementById('btn-run-inference');
+      if (forceManual && btn) {
+        btn.classList.add('opacity-70', 'cursor-wait');
+      }
+
+      // 1. Obtener última telemetría
+      const v = Number(document.getElementById('val-voltage').innerText) || 20.2;
+      const i = Number(document.getElementById('val-current').innerText) || 3.8;
+      const p = Number(document.getElementById('val-power').innerText) || (v * i);
+      const irr = Number(document.getElementById('val-irradiance').innerText) || 820;
+      const temp = Number(document.getElementById('val-temperature').innerText) || 35.5;
+      const hum = Number(document.getElementById('val-humidity').innerText) || 45;
+      const effReal = irr > 30 ? (p / (irr * PANEL_AREA_M2)) * 100 : 0;
+
+      const payload = {
+        voltage: v,
+        current: i,
+        power: p,
+        irradiance: irr,
+        temperature: temp,
+        humidity: hum,
+        efficiency_real: Number(effReal.toFixed(1)),
+        efficiency_nominal: NOMINAL_EFFICIENCY_PCT
+      };
+
+      // 2. Actualizar visualmente el vector de entrada en la tarjeta derecha
+      document.getElementById('xgb-feat-v').innerText = `${v.toFixed(2)} V`;
+      document.getElementById('xgb-feat-i').innerText = `${i.toFixed(2)} A`;
+      document.getElementById('xgb-feat-p').innerText = `${p.toFixed(1)} W`;
+      document.getElementById('xgb-feat-irr').innerText = `${Math.round(irr)} W/m²`;
+      document.getElementById('xgb-feat-temp').innerText = `${temp.toFixed(1)} °C`;
+      document.getElementById('xgb-feat-hum').innerText = `${Math.round(hum)} %`;
+      const effStatEl = document.getElementById('xgb-eff-stat');
+      if (effStatEl) effStatEl.innerText = `${effReal.toFixed(1)}%`;
+
+      const startTime = performance.now();
+      const endpointUrl = document.getElementById('xgb-endpoint-url').value.trim();
+
+      let result = null;
+      let latencyMs = 0;
+
+      try {
+        // 3. Request a la API Python de XGBoost
+        const response = await fetch(endpointUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(1800)
+        });
+
+        if (response.ok) {
+          result = await response.json();
+          latencyMs = Math.round(performance.now() - startTime);
+          updateApiStatusBadge(true);
+        } else {
+          throw new Error(`HTTP ${response.status}`);
+        }
+      } catch (err) {
+        // 4. Modo de respaldo local si el script python xgboost_api.py aún no se ha levantado
+        latencyMs = Math.round(performance.now() - startTime);
+        updateApiStatusBadge(false, "API: En espera (python xgboost_api.py)");
+        result = evaluateLocalModelFallback(payload);
+      }
+
+      // 5. Renderizar resultado en el dashboard
+      renderXGBoostResult(result, latencyMs);
+
+      if (forceManual && btn) {
+        btn.classList.remove('opacity-70', 'cursor-wait');
+      }
+      isXgbRunning = false;
+    }
+
+    function renderXGBoostResult(data, latencyMs) {
+      const card = document.getElementById('xgb-card-status');
+      const iconWrap = document.getElementById('xgb-status-icon-wrap');
+      const title = document.getElementById('xgb-status-title');
+      const scoreBadge = document.getElementById('xgb-anomaly-score');
+      const messageEl = document.getElementById('xgb-diagnostic-message');
+      const varsContainer = document.getElementById('xgb-affected-vars-container');
+      const confidenceEl = document.getElementById('xgb-confidence');
+      const latencyEl = document.getElementById('xgb-latency');
+      const timestampEl = document.getElementById('xgb-last-timestamp');
+
+      // Mensaje de diagnóstico dinámico solicitado
+      messageEl.innerText = data.diagnostic_message;
+
+      // Variables anómalas
+      const affected = data.affected_variables || [];
+      if (affected.length > 0) {
+        varsContainer.innerHTML = '<span class="text-[11px] text-neutral-400 font-mono mr-1">Variables anómalas:</span>' +
+          affected.map(v => `<span class="px-2 py-0.5 rounded text-[11px] font-mono bg-brand-yellow/15 text-brand-yellow border border-brand-yellow/30 font-medium">${v}</span>`).join(' ');
+      } else {
+        varsContainer.innerHTML = '<span class="text-[11px] text-emerald-400 font-mono flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5"></i> Variables dentro de tolerancia nominal</span>';
+      }
+
+      // Estilización condicional según requerimiento de mantenimiento
+      if (data.maintenance_required) {
+        card.className = "lg:col-span-8 flex flex-col justify-between p-4 rounded-xl bg-neutral-950/80 border border-brand-yellow/50 shadow-[0_0_25px_rgba(255,222,0,0.08)] transition-all";
+        iconWrap.className = "p-1.5 rounded-md bg-brand-yellow text-black flex items-center justify-center font-bold";
+        iconWrap.innerHTML = '<i data-lucide="alert-triangle" class="w-4 h-4 text-black"></i>';
+        title.className = "font-bold text-sm tracking-wide text-brand-yellow uppercase font-mono";
+        title.innerText = "Mantenimiento Requerido";
+        scoreBadge.className = "text-xs font-mono px-2 py-0.5 rounded bg-brand-yellow text-black font-extrabold shadow-sm";
+        scoreBadge.innerText = `Anomalía: ${(data.anomaly_score * 100).toFixed(0)}%`;
+        messageEl.className = "text-sm sm:text-[15px] font-sans text-neutral-100 leading-relaxed font-medium bg-neutral-900/90 p-3.5 rounded-lg border border-brand-yellow/30";
+      } else {
+        card.className = "lg:col-span-8 flex flex-col justify-between p-4 rounded-xl bg-neutral-950/60 border border-emerald-500/30 transition-all";
+        iconWrap.className = "p-1.5 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center";
+        iconWrap.innerHTML = '<i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>';
+        title.className = "font-bold text-sm tracking-wide text-emerald-400 uppercase font-mono";
+        title.innerText = "Operación Óptima";
+        scoreBadge.className = "text-xs font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30";
+        scoreBadge.innerText = `Anomalía: ${(data.anomaly_score * 100).toFixed(0)}%`;
+        messageEl.className = "text-sm sm:text-[15px] font-sans text-neutral-200 leading-relaxed font-normal bg-neutral-900/50 p-3.5 rounded-lg border border-neutral-800/80";
+      }
+
+      confidenceEl.innerText = `${data.confidence_score}%`;
+      latencyEl.innerText = `${latencyMs} ms`;
+      timestampEl.innerText = `Última inferencia: ${new Date().toLocaleTimeString()}`;
+
+      lucide.createIcons();
+    }
+
+    // Configurar ciclo automático de inferencia de mantenimiento (cada 6 segundos)
+    function setupXgbAutoDiagnosis() {
+      // Inferencia inicial tras 2 segundos
+      setTimeout(() => {
+        triggerXGBoostInference(false);
+      }, 2000);
+
+      // Loop recurrente cada 6 segundos si el toggle está activo
+      if (xgbInterval) clearInterval(xgbInterval);
+      xgbInterval = setInterval(() => {
+        const toggle = document.getElementById('xgb-auto-toggle');
+        if (toggle && toggle.checked) {
+          triggerXGBoostInference(false);
+        }
+      }, 6000);
+    }
+
+    // Start with simulation active (o directo en Firebase si la URL termina en ?modo=firebase)
+    if (new URLSearchParams(location.search).get('modo') === 'firebase') {
+      selectConnMode('firebase', 'Firebase (Celular)');
+    } else {
+      startSimulation();
+    }
+    setupXgbAutoDiagnosis();
+  </script>
+</body>
+</html>
