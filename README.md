@@ -25,6 +25,8 @@ Conversión al formato del dashboard (igual que el modo WebSerial):
 | `tds` (DS18B20) | temperatura; si es −999 usa `tdht`, y si no hay, 25 °C |
 | `hum` | humedad; si es −999 usa 50 % |
 
+Al abrir en modo Firebase las tarjetas están en 0 hasta que llega una lectura **nueva**.
+
 Se descartan las lecturas sin `volt` o `ma` válidos.
 
 ## 1. Reglas de Firebase
@@ -34,13 +36,24 @@ Solo permiten **agregar** lecturas con el formato correcto; nadie puede borrar n
 ## 2. Probar sin el celular
 Con el dashboard abierto en modo Firebase, desde una terminal:
 
+PowerShell (Windows):
+
+```powershell
+$body = '{"volt":4.3,"ma":108,"luz":900,"tds":25.9,"hum":69,"tdht":25.8,"ts":{".sv":"timestamp"}}'
+Invoke-RestMethod -Method Post -Uri "https://semis-f1ac4-default-rtdb.firebaseio.com/lecturas.json" -Body $body -ContentType "application/json"
+```
+
+bash / Mac / Linux:
+
 ```bash
 curl -X POST \
   -d '{"volt":4.3,"ma":108,"luz":900,"tds":25.9,"hum":69,"tdht":25.8,"ts":{".sv":"timestamp"}}' \
   'https://semis-f1ac4-default-rtdb.firebaseio.com/lecturas.json'
 ```
 
-Responde `{"name":"-N..."}` y en ≤ 2 s se mueven las tarjetas y gráficas.
+(En PowerShell `curl` es un alias de otro comando; por eso se usa `Invoke-RestMethod`.)
+
+Responde con un `name` (`-N...`) y en ≤ 2 s se mueven las tarjetas y gráficas.
 Si responde `Permission denied`, revisa que publicaste las reglas y que el JSON trae los 7 campos numéricos.
 
 ## 3. Vercel
