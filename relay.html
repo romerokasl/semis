@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sunny.EMC – Relay Bluetooth</title>
+<style>
+  :root { --bg:#0a0a0b; --card:#131316; --line:#26262b; --txt:#f4f4f5; --mut:#9a9aa3; --acc:#facc15; --ok:#34d399; --bad:#f87171; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h1 span { color: var(--acc); }
+  p.sub { margin: 0 0 18px; color: var(--mut); font-size: 14px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 12px 18px; cursor: pointer; background: var(--acc); color:#111; }
+  button.sec { background: transparent; color: var(--txt); border: 1px solid var(--line); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .pill { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid var(--line); border-radius:999px; font-size:14px; background:var(--card); }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--mut); }
+  .dot.on { background: var(--ok); } .dot.err { background: var(--bad); } .dot.wait { background: var(--acc); }
+  .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap:10px; margin:18px 0; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .card small { color:var(--mut); font-size:12px; letter-spacing:.04em; text-transform:uppercase; }
+  .card b { display:block; font-size:24px; margin-top:4px; font-variant-numeric: tabular-nums; }
+  label.chk { display:flex; align-items:center; gap:8px; color:var(--mut); font-size:14px; }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-top:12px; font-size:14px; }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12.5px; color:var(--mut); word-break: break-all; }
+  #log { height: 190px; overflow:auto; white-space: pre-wrap; margin-top: 12px; }
+  .warn { border-color: #5b4a12; color: #f3d36b; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sunny<span>.EMC</span> · Relay Bluetooth</h1>
+  <p class="sub">Lee el módulo Bluetooth LE del Nano y manda cada lectura a Firebase. Mantén esta página abierta y la pantalla encendida.</p>
+
+  <div id="unsupported" class="box warn" hidden>
+    Este navegador no soporta Web Bluetooth. Usa <b>Chrome</b> o <b>Edge</b> en Android, Windows, Mac o Linux (en iPhone no funciona).
+  </div>
+
+  <div class="row">
+    <button id="btn-connect">Conectar módulo</button>
+    <button id="btn-disconnect" class="sec" disabled>Desconectar</button>
+    <span class="pill"><span id="dot" class="dot"></span><span id="status">Sin conexión</span></span>
+  </div>
+
+  <div class="row" style="margin-top:14px">
+    <label class="chk"><input type="checkbox" id="chk-send" checked> Enviar a Firebase (si lo desmarcas, solo muestra los datos)</label>
+  </div>
+
+  <div class="grid">
+    <div class="card"><small>Voltaje</small><b id="v-volt">–</b></div>
+    <div class="card"><small>Corriente (mA)</small><b id="v-ma">–</b></div>
+    <div class="card"><small>Luz (0–1023)</small><b id="v-luz">–</b></div>
+    <div class="card"><small>Temp. DS18B20</small><b id="v-tds">–</b></div>
+    <div class="card"><small>Humedad</small><b id="v-hum">–</b></div>
+    <div class="card"><small>Temp. DHT11</small><b id="v-tdht">–</b></div>
+  </div>
+
+  <div class="box">
+    <div>Lecturas recibidas: <b id="n-rx">0</b> · Enviadas a Firebase: <b id="n-tx">0</b> · Descartadas: <b id="n-bad">0</b> · Errores de envío: <b id="n-err">0</b></div>
+    <div class="mono" style="margin-top:8px">Última línea: <span id="last">–</span></div>
+  </div>
+
+  <div class="box mono" id="log"></div>
+</main>
+
+<script>
+"use strict";
+const DB_URL = "https://semis-f1ac4-default-rtdb.firebaseio.com/lecturas.json";
+
+// Servicios BLE-UART más comunes en módulos tipo HM-10 / JDY / Nordic. El navegador solo deja
+// leer servicios declarados aquí.
+const OPTIONAL_SERVICES = [
+  0xFFE0, 0xFFF0, 0xFFB0, 0xFFC0, 0xFFD0, 0xFFA0, 0xFFE5, 0xFFE9, 0xFFF1, 0xAE00, 0xFEE0,
+  "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
+  "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+  "0000ffe0-0000-1000-8000-00805f9b34fb"
+];
+
+const $ = (id) => document.getElementById(id);
+let device = null, server = null, characteristic = null;
+let decoder = new TextDecoder("utf-8");
+let buffer = "";
+let userDisconnected = false, reconnectTries = 0;
+let wakeLock = null;
+const counts = { rx: 0, tx: 0, bad: 0, err: 0 };
+
+function log(msg) {
+  const t = new Date().toLocaleTimeString();
+  const el = $("log");
+  el.textContent += "[" + t + "] " + msg + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+function setStatus(text, kind) {
+  $("status").textContent = text;
+  $("dot").className = "dot " + (kind || "");
+}
+function showCounts() {
+  $("n-rx").textContent = counts.rx; $("n-tx").textContent = counts.tx;
+  $("n-bad").textContent = counts.bad; $("n-err").textContent = counts.err;
+}
+function setButtons(connected) {
+  $("btn-connect").disabled = connected;
+  $("btn-disconnect").disabled = !connected;
+}
+
+async function keepScreenOn() {
+  try {
+    if ("wakeLock" in navigator && !wakeLock) {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => { wakeLock = null; });
+    }
+  } catch (e) { /* no crítico */ }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && server && server.connected) keepScreenOn();
+});
+
+async function connectClicked() {
+  if (!navigator.bluetooth) { $("unsupported").hidden = false; return; }
+  try {
+    userDisconnected = false; reconnectTries = 0;
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: OPTIONAL_SERVICES
+    });
+    log("Dispositivo elegido: " + (device.name || "(sin nombre)") + " [" + device.id + "]");
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+    await openGatt();
+  } catch (e) {
+    log("No se conectó: " + (e && e.message ? e.message : e));
+    setStatus("Sin conexión", "err");
+    setButtons(false);
+  }
+}
+
+async function openGatt() {
+  setStatus("Conectando…", "wait");
+  server = await device.gatt.connect();
+  log("GATT conectado. Buscando servicios…");
+  const services = await server.getPrimaryServices();
+  let chosen = null, firstNotify = null;
+  for (const s of services) {
+    log("Servicio: " + s.uuid);
+    let chars = [];
+    try { chars = await s.getCharacteristics(); } catch (e) { log("  (no se pudo leer características: " + e.message + ")"); }
+    for (const c of chars) {
+      const p = c.properties;
+      const props = ["read", "write", "writeWithoutResponse", "notify", "indicate"].filter((k) => p[k]).join(",");
+      log("  Característica: " + c.uuid + " [" + props + "]");
+      if (p.notify || p.indicate) {
+        if (!firstNotify) firstNotify = c;
+        if (/^0000ffe1-/i.test(c.uuid)) chosen = c;
+      }
+    }
+  }
+  characteristic = chosen || firstNotify;
+  if (!characteristic) {
+    throw new Error("No encontré ninguna característica con notificaciones. Mira el registro de servicios y pásaselo a Claude.");
+  }
+  log("Usando característica: " + characteristic.uuid);
+  decoder = new TextDecoder("utf-8");
+  buffer = "";
+  characteristic.addEventListener("characteristicvaluechanged", onData);
+  await characteristic.startNotifications();
+  reconnectTries = 0;
+  setStatus("Conectado – esperando datos", "on");
+  setButtons(true);
+  keepScreenOn();
+}
+
+function onData(ev) {
+  buffer += decoder.decode(ev.target.value, { stream: true });
+  let i;
+  while ((i = buffer.indexOf("\n")) >= 0) {
+    const line = buffer.slice(0, i).trim();
+    buffer = buffer.slice(i + 1);
+    if (line) handleLine(line);
+  }
+  if (buffer.length > 400) { buffer = ""; }  // evita que crezca si nunca llega un salto de línea
+}
+
+function parseLine(line) {
+  const p = line.split(",");
+  if (p.length !== 7 || p[0].trim() !== "DATA") return null;
+  const n = p.slice(1).map((x) => (x.trim() === "" ? NaN : Number(x)));
+  if (!n.every((x) => Number.isFinite(x))) return null;
+  return { volt: n[0], ma: n[1], luz: n[2], tds: n[3], hum: n[4], tdht: n[5] };
+}
+
+function fmt(x, d) { return x <= -900 ? "error" : x.toFixed(d); }
+
+async function handleLine(line) {
+  $("last").textContent = line;
+  const r = parseLine(line);
+  if (!r) { counts.bad++; showCounts(); return; }
+  counts.rx++;
+  $("v-volt").textContent = fmt(r.volt, 2) + (r.volt <= -900 ? "" : " V");
+  $("v-ma").textContent = fmt(r.ma, 1);
+  $("v-luz").textContent = fmt(r.luz, 0);
+  $("v-tds").textContent = fmt(r.tds, 1) + (r.tds <= -900 ? "" : " °C");
+  $("v-hum").textContent = fmt(r.hum, 0) + (r.hum <= -900 ? "" : " %");
+  $("v-tdht").textContent = fmt(r.tdht, 1) + (r.tdht <= -900 ? "" : " °C");
+  setStatus("Conectado – recibiendo", "on");
+  showCounts();
+  if (!$("chk-send").checked) return;
+  const body = JSON.stringify({ volt: r.volt, ma: r.ma, luz: r.luz, tds: r.tds, hum: r.hum, tdht: r.tdht, ts: { ".sv": "timestamp" } });
+  try {
+    const res = await fetch(DB_URL, { method: "POST", body });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    counts.tx++;
+  } catch (e) {
+    counts.err++;
+    log("Error al enviar a Firebase: " + e.message);
+  }
+  showCounts();
+}
+
+function onDisconnected() {
+  if (characteristic) { try { characteristic.removeEventListener("characteristicvaluechanged", onData); } catch (e) {} }
+  characteristic = null;
+  if (userDisconnected) { setStatus("Sin conexión", ""); setButtons(false); return; }
+  log("Se perdió la conexión.");
+  tryReconnect();
+}
+
+async function tryReconnect() {
+  if (userDisconnected || !device) return;
+  if (reconnectTries >= 6) {
+    setStatus("Sin conexión (pulsa Conectar)", "err");
+    setButtons(false);
+    return;
+  }
+  reconnectTries++;
+  setStatus("Reconectando (" + reconnectTries + "/6)…", "wait");
+  setButtons(true);
+  await new Promise((r) => setTimeout(r, 2000));
+  try { await openGatt(); }
+  catch (e) { log("Reconexión falló: " + e.message); tryReconnect(); }
+}
+
+function disconnectClicked() {
+  userDisconnected = true;
+  try { if (device && device.gatt.connected) device.gatt.disconnect(); } catch (e) {}
+  if (wakeLock) { try { wakeLock.release(); } catch (e) {} }
+  setStatus("Sin conexión", "");
+  setButtons(false);
+}
+
+$("btn-connect").addEventListener("click", connectClicked);
+$("btn-disconnect").addEventListener("click", disconnectClicked);
+if (!navigator.bluetooth) { $("unsupported").hidden = false; $("btn-connect").disabled = true; }
+log("Listo. Pulsa «Conectar módulo» y elige el módulo del Nano.");
+</script>
+</body>
+</html>
