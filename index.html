@@ -2068,8 +2068,6 @@
     function startFirebase() {
       disconnectAll();
       fbLastKey = null;
-      modeloVentana = [];
-      modeloUltimaLlegada = 0;
       fbOnline = true;
       updateConnectionState(true);
 
@@ -2090,10 +2088,7 @@
               if (k === fbLastKey) continue;
               fbLastKey = k;
               const t = firebaseToTelemetry(obj[k]);
-              if (t) {
-                processIncomingTelemetry(t);
-                guardarParaModelo(obj[k]);
-              }
+              if (t) processIncomingTelemetry(t);
             }
           }
           if (!fbOnline) { fbOnline = true; updateConnectionState(true); }
@@ -2224,17 +2219,15 @@
     }
 
     // --- Modelo XGBoost real (modelo.js + modelo_web.json), solo en modo Firebase ---
-    const MODELO_HUECO_MS = 10000;
+    const MODELO_HUECO_MS = 10000;   // separación entre lecturas que se considera un corte
+    const MODELO_VIEJO_MS = 30000;   // antigüedad a partir de la cual no se considera en vivo
     let modeloSolar = null;
-    let modeloVentana = [];      // últimas lecturas crudas de Firebase
-    let modeloUltimaLlegada = 0;
+    let modeloOcupado = false;
 
-    function guardarParaModelo(r) {
-      const previa = modeloVentana[modeloVentana.length - 1];
-      if (previa && !(r.ts - previa.ts <= MODELO_HUECO_MS)) modeloVentana = [];
-      modeloVentana.push(r);
-      if (modeloVentana.length > 15) modeloVentana.shift();
-      modeloUltimaLlegada = Date.now();
+    // Las últimas n lecturas ya registradas en Firebase, de la más antigua a la más nueva
+    async function ultimasLecturas(n) {
+      const obj = await firebaseFetch(`orderBy=%22%24key%22&limitToLast=${n}`);
+      return Object.keys(obj || {}).sort().map(k => obj[k]);
     }
 
     async function cargarModelo() {
@@ -2299,39 +2292,51 @@
       if (currentMode !== 'firebase') return;
       setModeloBadge('Modelo: XGBoost en navegador', true);
 
-      if (!isConnected || !modeloVentana.length || Date.now() - modeloUltimaLlegada > MODELO_HUECO_MS) {
-        renderSinDiagnostico('Sin lecturas en vivo', 'Esperando datos nuevos. Revisa que el circuito esté encendido y relay.html abierto en el celular.');
-        return;
-      }
-      mostrarEntradas(modeloVentana[modeloVentana.length - 1]);
-      if (modeloVentana.length < modelo.ventana) {
-        renderSinDiagnostico('Reuniendo lecturas', `El modelo necesita ${modelo.ventana} lecturas seguidas (unos 30 s). Van ${modeloVentana.length}.`);
-        return;
-      }
-
       const inicio = performance.now();
-      const r = ModeloSolar.evaluar(modelo, modeloVentana);
+      let lecturas;
+      try {
+        lecturas = await ultimasLecturas(modelo.ventana);
+      } catch (e) {
+        renderSinDiagnostico('Sin conexión', 'No se pudieron leer las últimas lecturas de Firebase. Revisa la conexión a internet.');
+        return;
+      }
+      if (currentMode !== 'firebase') return;
+      if (lecturas.length < modelo.ventana) {
+        renderSinDiagnostico('Faltan lecturas', `El modelo necesita ${modelo.ventana} lecturas registradas y hay ${lecturas.length}.`);
+        return;
+      }
+      const ultima = lecturas[lecturas.length - 1];
+      mostrarEntradas(ultima);
+
+      // De cuándo son los datos usados, para no confundir lecturas guardadas con en vivo
+      const fecha = (ts) => new Date(ts).toLocaleString('es-SV', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      let origen = `Basado en las últimas ${modelo.ventana} lecturas registradas (hasta ${fecha(ultima.ts)}).`;
+      if (Date.now() - ultima.ts > MODELO_VIEJO_MS) origen += ' No son en vivo.';
+      if (lecturas.some((x, k) => k > 0 && x.ts - lecturas[k - 1].ts > MODELO_HUECO_MS)) origen += ' Incluyen cortes de transmisión.';
+
+      const r = ModeloSolar.evaluar(modelo, lecturas);
       const latencia = Math.max(1, Math.round(performance.now() - inicio));
       if (r.motivo) {
         const motivos = {
-          sensor: ['Sensor sin lectura', 'Algún sensor reportó un fallo en los últimos 30 s. Revisa sus conexiones.'],
+          sensor: ['Sensor sin lectura', 'Algún sensor reportó un fallo en esas lecturas. Revisa sus conexiones.'],
           tope: ['Voltaje al tope', 'El voltaje llegó al límite de medición (5 V). En ese rango el modelo no puede distinguir fallas.'],
           rango: ['Voltaje fuera de rango', 'El voltaje está fuera de lo que el modelo conoce. Revisa las conexiones del panel y la iluminación.']
         };
-        renderSinDiagnostico(...motivos[r.motivo]);
+        const [titulo, texto] = motivos[r.motivo];
+        renderSinDiagnostico(titulo, `${texto} ${origen}`);
         return;
       }
 
       // Pérdida óptica y resistencia en serie se muestran juntas: el modelo las confunde
       const grupos = [
-        { nombre: 'Normal', p: r.p[0], msg: 'Las lecturas de los últimos 30 s se parecen a la operación normal registrada.' },
+        { nombre: 'Normal', p: r.p[0], msg: 'Las lecturas evaluadas se parecen a la operación normal registrada.' },
         { nombre: 'Requiere inspección', p: r.p[1] + r.p[3], msg: 'Patrón compatible con pérdida óptica (suciedad o amarillamiento) o aumento de resistencia en serie (corrosión). Limpia el panel y, si continúa, revisa celdas y conexiones.' },
         { nombre: 'Sombra parcial', p: r.p[2], msg: 'Patrón compatible con sombra parcial. Revisa si hay algo obstruyendo el panel.' }
       ];
       const mejor = grupos.reduce((a, b) => (b.p > a.p ? b : a));
       renderXGBoostResult({
         maintenance_required: mejor !== grupos[0],
-        diagnostic_message: `${mejor.msg} Resultado orientativo: modelo experimental entrenado con fallas simuladas.`,
+        diagnostic_message: `${mejor.msg} ${origen} Resultado orientativo: modelo experimental entrenado con fallas simuladas.`,
         anomaly_score: 1 - grupos[0].p,
         confidence_score: (mejor.p * 100).toFixed(1)
       }, latencia);
@@ -2341,7 +2346,19 @@
     }
 
     async function triggerXGBoostInference(forceManual = false) {
-      if (currentMode === 'firebase') return diagnosticarConModelo();
+      if (currentMode === 'firebase') {
+        if (modeloOcupado) return;
+        modeloOcupado = true;
+        const boton = document.getElementById('btn-run-inference');
+        if (forceManual) boton.classList.add('opacity-70', 'cursor-wait');
+        try {
+          await diagnosticarConModelo();
+        } finally {
+          boton.classList.remove('opacity-70', 'cursor-wait');
+          modeloOcupado = false;
+        }
+        return;
+      }
       if (isXgbRunning && !forceManual) return;
       isXgbRunning = true;
 

@@ -32,12 +32,12 @@ la tarjeta sigue como antes (API en `localhost:5000` o, si no responde, **reglas
 |---|---|
 | `modelo.js` | Calcula las variables de la ventana y recorre los árboles |
 | `modelo_web.json` | Modelo exportado. `entrenar.py` lo regenera |
-| `index.html` | Guarda las últimas 15 lecturas crudas y muestra el resultado |
+| `index.html` | Lee de Firebase las últimas 15 lecturas registradas y muestra el resultado |
 
-- Necesita 15 lecturas seguidas (unos 30 s).
+- "Diagnosticar Ahora" responde de inmediato: no espera lecturas nuevas.
+- Si las lecturas tienen más de 30 s, la tarjeta avisa que no son en vivo. También avisa si tienen cortes.
 - Pérdida óptica y resistencia en serie se muestran juntas como "Requiere inspección".
-- No diagnostica sin lecturas en vivo, con un sensor fallido, con el voltaje al tope (4.99 V o más)
-  o fuera del rango entrenado.
+- No diagnostica con un sensor fallido, con el voltaje al tope (4.99 V o más) o fuera del rango entrenado.
 - "Confianza" es la probabilidad que da el modelo, no la probabilidad real de acertar.
 - Paridad con Python: `py -3.13 ml/probar_web.py` (necesita Node).
 
