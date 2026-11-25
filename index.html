@@ -907,6 +907,7 @@
   </footer>
 
   <!-- ================= JAVASCRIPT LOGIC ================= -->
+  <script src="modelo.js"></script>
   <script>
     // Initialize Lucide Icons
     lucide.createIcons();
@@ -2067,6 +2068,8 @@
     function startFirebase() {
       disconnectAll();
       fbLastKey = null;
+      modeloVentana = [];
+      modeloUltimaLlegada = 0;
       fbOnline = true;
       updateConnectionState(true);
 
@@ -2087,7 +2090,10 @@
               if (k === fbLastKey) continue;
               fbLastKey = k;
               const t = firebaseToTelemetry(obj[k]);
-              if (t) processIncomingTelemetry(t);
+              if (t) {
+                processIncomingTelemetry(t);
+                guardarParaModelo(obj[k]);
+              }
             }
           }
           if (!fbOnline) { fbOnline = true; updateConnectionState(true); }
@@ -2217,7 +2223,125 @@
       };
     }
 
+    // --- Modelo XGBoost real (modelo.js + modelo_web.json), solo en modo Firebase ---
+    const MODELO_HUECO_MS = 10000;
+    let modeloSolar = null;
+    let modeloVentana = [];      // últimas lecturas crudas de Firebase
+    let modeloUltimaLlegada = 0;
+
+    function guardarParaModelo(r) {
+      const previa = modeloVentana[modeloVentana.length - 1];
+      if (previa && !(r.ts - previa.ts <= MODELO_HUECO_MS)) modeloVentana = [];
+      modeloVentana.push(r);
+      if (modeloVentana.length > 15) modeloVentana.shift();
+      modeloUltimaLlegada = Date.now();
+    }
+
+    async function cargarModelo() {
+      if (!modeloSolar) {
+        const res = await fetch('modelo_web.json', { cache: 'no-cache' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        modeloSolar = await res.json();
+      }
+      return modeloSolar;
+    }
+
+    function setModeloBadge(texto, activo) {
+      updateApiStatusBadge(activo);
+      document.getElementById('xgb-api-text').innerText = texto;
+    }
+
+    // Estado neutro: no hay diagnóstico (esperando datos o fuera de lo que el modelo conoce)
+    function renderSinDiagnostico(titulo, mensaje) {
+      document.getElementById('xgb-card-status').className = "lg:col-span-8 flex flex-col justify-between p-4 rounded-xl bg-neutral-950/60 border border-neutral-800/60 transition-all";
+      const iconWrap = document.getElementById('xgb-status-icon-wrap');
+      iconWrap.className = "p-1.5 rounded-md bg-neutral-800 text-neutral-300 flex items-center justify-center";
+      iconWrap.innerHTML = '<i data-lucide="clock" class="w-4 h-4"></i>';
+      const title = document.getElementById('xgb-status-title');
+      title.className = "font-bold text-sm tracking-wide text-neutral-300 uppercase font-mono";
+      title.innerText = titulo;
+      const score = document.getElementById('xgb-anomaly-score');
+      score.className = "text-xs font-mono px-2 py-0.5 rounded bg-neutral-900 text-neutral-400 font-bold border border-neutral-800";
+      score.innerText = "Anomalía: --";
+      const msg = document.getElementById('xgb-diagnostic-message');
+      msg.className = "text-sm sm:text-[15px] font-sans text-neutral-200 leading-relaxed font-normal bg-neutral-900/50 p-3.5 rounded-lg border border-neutral-800/80";
+      msg.innerText = mensaje;
+      document.getElementById('xgb-affected-vars-container').innerHTML = '';
+      document.getElementById('xgb-confidence').innerText = '--%';
+      document.getElementById('xgb-latency').innerText = '-- ms';
+      document.getElementById('xgb-last-timestamp').innerText = `Revisado: ${new Date().toLocaleTimeString()}`;
+      lucide.createIcons();
+    }
+
+    function mostrarEntradas(r) {
+      const v = r.volt, i = r.ma / 1000, p = v * i;
+      const irr = Math.min(1200, Math.round((r.luz / 1023) * 1200));
+      const eff = irr > 30 ? (p / (irr * PANEL_AREA_M2)) * 100 : 0;
+      const poner = (id, texto) => { document.getElementById(id).innerText = texto; };
+      poner('xgb-feat-v', `${v.toFixed(2)} V`);
+      poner('xgb-feat-i', `${i.toFixed(2)} A`);
+      poner('xgb-feat-p', `${p.toFixed(1)} W`);
+      poner('xgb-feat-irr', `${irr} W/m²`);
+      poner('xgb-feat-temp', `${r.tds.toFixed(1)} °C`);
+      poner('xgb-feat-hum', `${Math.round(r.hum)} %`);
+      poner('xgb-eff-stat', `${eff.toFixed(1)}%`);
+    }
+
+    async function diagnosticarConModelo() {
+      let modelo;
+      try {
+        modelo = await cargarModelo();
+      } catch (e) {
+        setModeloBadge('Modelo: no disponible', false);
+        renderSinDiagnostico('Modelo no disponible', 'No se pudo cargar modelo_web.json. Verifica que esté publicado junto a index.html.');
+        return;
+      }
+      if (currentMode !== 'firebase') return;
+      setModeloBadge('Modelo: XGBoost en navegador', true);
+
+      if (!isConnected || !modeloVentana.length || Date.now() - modeloUltimaLlegada > MODELO_HUECO_MS) {
+        renderSinDiagnostico('Sin lecturas en vivo', 'Esperando datos nuevos. Revisa que el circuito esté encendido y relay.html abierto en el celular.');
+        return;
+      }
+      mostrarEntradas(modeloVentana[modeloVentana.length - 1]);
+      if (modeloVentana.length < modelo.ventana) {
+        renderSinDiagnostico('Reuniendo lecturas', `El modelo necesita ${modelo.ventana} lecturas seguidas (unos 30 s). Van ${modeloVentana.length}.`);
+        return;
+      }
+
+      const inicio = performance.now();
+      const r = ModeloSolar.evaluar(modelo, modeloVentana);
+      const latencia = Math.max(1, Math.round(performance.now() - inicio));
+      if (r.motivo) {
+        const motivos = {
+          sensor: ['Sensor sin lectura', 'Algún sensor reportó un fallo en los últimos 30 s. Revisa sus conexiones.'],
+          tope: ['Voltaje al tope', 'El voltaje llegó al límite de medición (5 V). En ese rango el modelo no puede distinguir fallas.'],
+          rango: ['Voltaje fuera de rango', 'El voltaje está fuera de lo que el modelo conoce. Revisa las conexiones del panel y la iluminación.']
+        };
+        renderSinDiagnostico(...motivos[r.motivo]);
+        return;
+      }
+
+      // Pérdida óptica y resistencia en serie se muestran juntas: el modelo las confunde
+      const grupos = [
+        { nombre: 'Normal', p: r.p[0], msg: 'Las lecturas de los últimos 30 s se parecen a la operación normal registrada.' },
+        { nombre: 'Requiere inspección', p: r.p[1] + r.p[3], msg: 'Patrón compatible con pérdida óptica (suciedad o amarillamiento) o aumento de resistencia en serie (corrosión). Limpia el panel y, si continúa, revisa celdas y conexiones.' },
+        { nombre: 'Sombra parcial', p: r.p[2], msg: 'Patrón compatible con sombra parcial. Revisa si hay algo obstruyendo el panel.' }
+      ];
+      const mejor = grupos.reduce((a, b) => (b.p > a.p ? b : a));
+      renderXGBoostResult({
+        maintenance_required: mejor !== grupos[0],
+        diagnostic_message: `${mejor.msg} Resultado orientativo: modelo experimental entrenado con fallas simuladas.`,
+        anomaly_score: 1 - grupos[0].p,
+        confidence_score: (mejor.p * 100).toFixed(1)
+      }, latencia);
+      document.getElementById('xgb-affected-vars-container').innerHTML =
+        '<span class="text-[11px] text-neutral-400 font-mono mr-1">Probabilidad por clase:</span>' +
+        grupos.map(g => `<span class="px-2 py-0.5 rounded text-[11px] font-mono border ${g === mejor ? 'bg-brand-yellow/15 text-brand-yellow border-brand-yellow/30 font-medium' : 'bg-neutral-900 text-neutral-400 border-neutral-800'}">${g.nombre} ${(g.p * 100).toFixed(0)}%</span>`).join(' ');
+    }
+
     async function triggerXGBoostInference(forceManual = false) {
+      if (currentMode === 'firebase') return diagnosticarConModelo();
       if (isXgbRunning && !forceManual) return;
       isXgbRunning = true;
 

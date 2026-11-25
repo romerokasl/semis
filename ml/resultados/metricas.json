@@ -1,0 +1,187 @@
+{
+  "aviso": "Fallas simuladas. No es validacion con fallas reales del panel propio.",
+  "clases": [
+    "normal",
+    "perdida_optica",
+    "sombra_parcial",
+    "resistencia_serie"
+  ],
+  "variables": [
+    "volt_media",
+    "volt_std",
+    "volt_min",
+    "volt_max",
+    "volt_pendiente",
+    "volt_salto_max",
+    "luz_media",
+    "luz_std",
+    "luz_pendiente",
+    "volt_por_luz",
+    "temp_ds18b20",
+    "temp_dht11",
+    "humedad"
+  ],
+  "filtrado": {
+    "total": 8977,
+    "pruebas_manuales": 2,
+    "sensor_fallido": 0,
+    "voltaje_fuera_de_rango": 646,
+    "usadas": 8329
+  },
+  "ventanas_normales": 448,
+  "efectos_tecnalia": {
+    "ki_amarillamiento": 0.921894194874358,
+    "rs_pu_corrosion": 0.05529937846794786,
+    "rs_pu_cajas": [
+      0.049247471009129046,
+      0.09849494201825809
+    ]
+  },
+  "A_tiempo_y_paneles_no_vistos": {
+    "modelo": {
+      "n": 5376,
+      "exactitud": 0.7734375,
+      "f1_macro": 0.7704860677308889,
+      "falsas_alarmas": 0.16964285714285715,
+      "fallas_detectadas": 0.9476686507936508
+    },
+    "solo_voltaje": {
+      "n": 5376,
+      "exactitud": 0.7287946428571429,
+      "f1_macro": 0.7233561361864466,
+      "falsas_alarmas": 0.21875,
+      "fallas_detectadas": 0.9404761904761905
+    }
+  },
+  "A_matriz_confusion": [
+    [
+      1116,
+      180,
+      0,
+      48
+    ],
+    [
+      180,
+      676,
+      5,
+      483
+    ],
+    [
+      0,
+      0,
+      1344,
+      0
+    ],
+    [
+      31,
+      290,
+      1,
+      1022
+    ]
+  ],
+  "A_clases_unidas": {
+    "clases": [
+      "normal",
+      "requiere_inspeccion",
+      "sombra_parcial"
+    ],
+    "exactitud": 0.9172247023809523,
+    "f1_macro": 0.9169362119203189,
+    "recall": [
+      0.8303571428571429,
+      0.9192708333333334,
+      1.0
+    ]
+  },
+  "rango_volt_media": [
+    0.452,
+    4.917866666666667
+  ],
+  "A_por_origen": {
+    "medellin_sombra": {
+      "ok": 1.0,
+      "alerta": 1.0
+    },
+    "medellin_suciedad": {
+      "ok": 0.5117994100294986,
+      "alerta": 0.7404129793510325
+    },
+    "propio": {
+      "ok": 0.8303571428571429,
+      "alerta": 0.16964285714285715
+    },
+    "tecnalia_amarillamiento": {
+      "ok": 0.493993993993994,
+      "alerta": 0.993993993993994
+    },
+    "tecnalia_resistencia": {
+      "ok": 0.7604166666666666,
+      "alerta": 0.9769345238095238
+    }
+  },
+  "B_dia_fuera": {
+    "11/11": {
+      "modelo": {
+        "n": 180,
+        "exactitud": 0.49444444444444446,
+        "f1_macro": 0.3729050279329609,
+        "falsas_alarmas": 1.0,
+        "fallas_detectadas": 1.0
+      },
+      "solo_voltaje": {
+        "n": 180,
+        "exactitud": 0.5333333333333333,
+        "f1_macro": 0.48,
+        "falsas_alarmas": 1.0,
+        "fallas_detectadas": 1.0
+      }
+    },
+    "18/11": {
+      "modelo": {
+        "n": 756,
+        "exactitud": 0.5052910052910053,
+        "f1_macro": 0.43018141873046756,
+        "falsas_alarmas": 0.8253968253968254,
+        "fallas_detectadas": 0.91005291005291
+      },
+      "solo_voltaje": {
+        "n": 756,
+        "exactitud": 0.5542328042328042,
+        "f1_macro": 0.5472683146313353,
+        "falsas_alarmas": 0.746031746031746,
+        "fallas_detectadas": 0.9312169312169312
+      }
+    },
+    "20/11": {
+      "modelo": {
+        "n": 4440,
+        "exactitud": 0.5745495495495495,
+        "f1_macro": 0.5068132698833293,
+        "falsas_alarmas": 0.02702702702702703,
+        "fallas_detectadas": 0.5183183183183183
+      },
+      "solo_voltaje": {
+        "n": 4440,
+        "exactitud": 0.6157657657657658,
+        "f1_macro": 0.6046307744183432,
+        "falsas_alarmas": 0.33513513513513515,
+        "fallas_detectadas": 0.772972972972973
+      }
+    }
+  },
+  "importancia": {
+    "volt_media": 0.39149028062820435,
+    "volt_max": 0.17023566365242004,
+    "volt_min": 0.1356297880411148,
+    "temp_dht11": 0.06491118669509888,
+    "luz_media": 0.061664097011089325,
+    "volt_por_luz": 0.05570363625884056,
+    "humedad": 0.04085123911499977,
+    "temp_ds18b20": 0.022817233577370644,
+    "volt_std": 0.01519724726676941,
+    "volt_salto_max": 0.012678480707108974,
+    "luz_std": 0.011924143880605698,
+    "luz_pendiente": 0.008573035709559917,
+    "volt_pendiente": 0.008324049413204193
+  }
+}
