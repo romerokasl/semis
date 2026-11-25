@@ -2504,11 +2504,11 @@
       }, 6000);
     }
 
-    // Start with simulation active (o directo en Firebase si la URL termina en ?modo=firebase)
-    if (new URLSearchParams(location.search).get('modo') === 'firebase') {
-      selectConnMode('firebase', 'Firebase (Celular)');
-    } else {
+    // Inicia en Firebase por defecto (la simulación se abre con ?modo=sim o desde el menú)
+    if (new URLSearchParams(location.search).get('modo') === 'sim') {
       startSimulation();
+    } else {
+      selectConnMode('firebase', 'Firebase (Celular)');
     }
     setupXgbAutoDiagnosis();
   </script>

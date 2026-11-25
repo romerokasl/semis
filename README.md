@@ -10,9 +10,8 @@ Arduino Nano (HC-05) → celular Android (App Inventor) → Firebase Realtime Da
 - `README.md` – este archivo.
 
 ## Usar el modo Firebase
-- En el dashboard: menú de conexión → **Firebase (Celular)**.
-- O abrir directo en ese modo: `https://TU-SITIO.vercel.app/?modo=firebase`.
-- Sin `?modo=firebase` el dashboard arranca en Simulación Demo, como antes.
+- El dashboard inicia en este modo por defecto.
+- Para abrir la Simulación Demo: `https://TU-SITIO.vercel.app/?modo=sim` o desde el menú de conexión.
 
 Al conectar, solo muestra lecturas **nuevas** (la última que ya estaba guardada se toma como punto de partida, para no pasar datos viejos como si fueran en vivo). Consulta Firebase cada 2 s.
 
