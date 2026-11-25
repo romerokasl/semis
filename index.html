@@ -918,7 +918,8 @@
 
     // Nominal Panel Specifications (STC: 1000 W/m², 25°C)
     const NOMINAL_EFFICIENCY_PCT = 20.5;
-    const PANEL_AREA_M2 = 0.50; // Área activa de panel de 100W nominal
+    // Área para la eficiencia: panel real de 7 x 7 cm; la simulación genera datos de un panel de 100W
+    const areaPanelM2 = () => (currentMode === 'sim' ? 0.50 : 0.07 * 0.07);
     
     // State storage for rolling real-time stream
     const historyData = {
@@ -1465,9 +1466,9 @@
         }
 
         // Actualizar métricas de eficiencia en ventanas históricas
-        const curP = Number(document.getElementById('val-power').innerText) || 0;
+        const curP = (Number(document.getElementById('val-voltage').innerText) || 0) * (Number(document.getElementById('val-current').innerText) || 0);
         const curIrr = Number(document.getElementById('val-irradiance').innerText) || 0;
-        const histEff = curIrr > 30 ? Math.min(25.0, (curP / (curIrr * PANEL_AREA_M2)) * 100) : 0.0;
+        const histEff = curIrr > 30 ? Math.min(25.0, (curP / (curIrr * areaPanelM2())) * 100) : 0.0;
         const histRatio = Math.min(100, Math.round((histEff / NOMINAL_EFFICIENCY_PCT) * 100));
 
         const valEffReal = document.getElementById('val-efficiency-real');
@@ -1506,7 +1507,7 @@
       accumulatedWh += (power * (SAMPLING_INTERVAL_MS / 3600000));
 
       // Cálculo de Eficiencia Real y Performance Ratio (PR) vs Nominal STC (20.5%)
-      const realEff = irradiance > 30 ? Math.min(25.0, (power / (irradiance * PANEL_AREA_M2)) * 100) : 0.0;
+      const realEff = irradiance > 30 ? Math.min(25.0, (power / (irradiance * areaPanelM2())) * 100) : 0.0;
       const effRatio = NOMINAL_EFFICIENCY_PCT > 0 ? Math.min(100, Math.round((realEff / NOMINAL_EFFICIENCY_PCT) * 100)) : 0;
 
       if (voltage > peakVoc) peakVoc = voltage;
@@ -2177,7 +2178,7 @@
       const irr = telemetry.irradiance;
       const temp = telemetry.temperature;
       const hum = telemetry.humidity;
-      const effReal = irr > 30 ? (p / (irr * PANEL_AREA_M2)) * 100 : 0;
+      const effReal = irr > 30 ? (p / (irr * areaPanelM2())) * 100 : 0;
 
       const anomalies = [];
       if (irr > 350 && i < (irr * 0.0035)) {
@@ -2269,7 +2270,7 @@
     function mostrarEntradas(r) {
       const v = r.volt, i = r.ma / 1000, p = v * i;
       const irr = Math.min(1200, Math.round((r.luz / 1023) * 1200));
-      const eff = irr > 30 ? (p / (irr * PANEL_AREA_M2)) * 100 : 0;
+      const eff = irr > 30 ? (p / (irr * areaPanelM2())) * 100 : 0;
       const poner = (id, texto) => { document.getElementById(id).innerText = texto; };
       poner('xgb-feat-v', `${v.toFixed(2)} V`);
       poner('xgb-feat-i', `${i.toFixed(2)} A`);
@@ -2374,7 +2375,7 @@
       const irr = Number(document.getElementById('val-irradiance').innerText) || 820;
       const temp = Number(document.getElementById('val-temperature').innerText) || 35.5;
       const hum = Number(document.getElementById('val-humidity').innerText) || 45;
-      const effReal = irr > 30 ? (p / (irr * PANEL_AREA_M2)) * 100 : 0;
+      const effReal = irr > 30 ? (p / (irr * areaPanelM2())) * 100 : 0;
 
       const payload = {
         voltage: v,
